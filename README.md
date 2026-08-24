@@ -417,6 +417,16 @@ MIT License，见 [LICENSE](LICENSE)。
 
 ## 更新记录
 
+### 2026-08-24 — 平板端本地 Agent 方案出炉（dsh-pad v1.0.0）
+
+华为鸿蒙**平板端（tablet / 2in1）** dsh 客户端首个构建（bundle ，Release 资产 ）：
+
+- **本地 Agent 循环**： 设备端完整 agent 循环，不依赖云端调度
+- **工具注册**： 本地工具注册与调度
+- **双通道**： 直连 DeepSeek +  走 dsh 宿主 API，可切换
+- **会话存储**： 本地持久化
+- 当前为 debug 未签名构建，安装需先开发签名（hap_installer / hdc）
+
 ### 2026-08-22 — 修好读图与视觉识别（attachment-local + dsh-visual-plugin 补丁）
 
 本机实测「把图片拖进 DeepSeek Harness → 模型看见并描述」之前断在两级：图片存不下来、视觉端点未配置。
