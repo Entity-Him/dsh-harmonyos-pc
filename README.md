@@ -524,3 +524,13 @@ dsh 官方更新至 `0.1.0-rc.7`（DeepSeek 群聊发布），本仓库移植版
 **修复**
 
 - 修复了新建会话失败的 bug：预设引用的自定义插件包名需同时存在于 dsh 基础 `node_modules` 与 profile 层 `node_modules` 软链层（host 组合基座向上解析到 `profiles/node_modules`），缺软链会导致 preset mount 失败 → `SessionCreateError`。安装步骤见上文「2.5」。`dsh-tool-list` 已按此双路径就位。
+
+---
+
+## 参与开发 / Contributing
+
+欢迎共同创建！本项目开放协作，开发群成员可直接申请成为协作者，任何开发者也可通过 Fork + PR 参与。
+
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 提交规范：`main` 分支受保护，PR 需 review 后合并
+- 想成为共同创建者：联系群主申请，或在 Discussions 里冒泡
