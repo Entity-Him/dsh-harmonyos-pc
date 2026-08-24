@@ -417,6 +417,15 @@ MIT License，见 [LICENSE](LICENSE)。
 
 ## 更新记录
 
+### 2026-08-24 — 跟进官方 0.1.1-rc.2（鸿蒙补丁零变化）
+
+dsh 官方更新至 `0.1.1-rc.2`（2026-08-21 发布），本地 dsh-test 已同步升级并验证：
+
+- 升级：`dsh-manual-install.mjs 0.1.1-rc.2`，闭包 472 包（覆盖 3 / 保留基线 408 / 平台跳过 61），依赖树仅新增 `@types/retry`、`@types/node`
+- 五个鸿蒙源码补丁（credentials / session / permission / attachment / vision）锚点全部命中，无需改动
+- `harmony.patch.yml` 照常生效：web 启动正常、3080 HTTP 200，插件全加载（codex-bridge / deveco-bridge 6 工具 / peak-valley / evoresearch / cost-meter）
+- 历史崩溃点复查：`dsh-workflow-worker-thread` 依赖的 `@deepseek-ai/dsh-workflow` 基线完整，无预设挂载错误
+
 ### 2026-08-24 — 平板端本地 Agent 方案出炉（dsh-pad v1.0.0）
 
 华为鸿蒙**平板端（tablet / 2in1）** dsh 客户端首个构建（bundle `com.dsh.harmonyos.pad`，Release 资产 `entry-default-unsigned.hap`）：
