@@ -105,4 +105,4 @@ A：跑 `bench/bench.mjs`，和 `bench/result-*.json` 对比。
 ## Contact / 沟通渠道
 
 - GitHub Issues / Discussions
-- 开发群（群主维护，招募共同创建者中）
+- 开发群：930088487（群主维护，招募共同创建者中）
