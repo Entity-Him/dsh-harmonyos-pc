@@ -431,3 +431,12 @@ The benchmark expanded from 6 questions to 6 axes × 2 questions = 12 auto-grade
 **Fixes**
 
 - Fixed the bug where creating new sessions failed: custom plugin package names referenced by presets must exist in both dsh's base `node_modules` and the profile-layer `node_modules` symlink layer (the host composition base resolves upward to `profiles/node_modules`); a missing symlink causes preset mount failure → `SessionCreateError`. Install steps are in "2.5" above. `dsh-tool-list` has been put in place on this dual path.
+
+---
+
+## Contributing
+
+Co-creation welcome! Dev-group members can apply to become collaborators; anyone can contribute via Fork + PR.
+
+- Guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- `main` is protected - PRs require review before merge.
