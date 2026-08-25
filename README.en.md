@@ -26,7 +26,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 
 > **QQ group for project discussion: 930088487** — HarmonyOS dsh adaptation, cache optimization, and plugin development. You're welcome to join.
 >
-> **Beginner tutorial** (online): [Open the dsh-harmonyos-pc beginner installation tutorial](https://docs.google.com/document/d/1bH07I_Zj5r-kKytnZ7aj6hMTa1c5ZQdE/edit)
+> **Beginner tutorial** (online): [Open the dsh-harmonyos-pc beginner installation tutorial](https://docs.google.com/document/d/1f3l-Q2Di6DmPy4xydYr4lUYIxmoOA014D63XNBTPSys/edit)
 
 > **About this project**: A complete adaptation suite to get DeepSeek Harness (dsh) fully running on HarmonyOS devices. Almost nobody has done this on HarmonyOS—native ELF/.node modules, node-pty, and Koffi cannot load on such devices. This repository distills the whole engineering effort—installation, patching, cache optimization, plugin installation, and self-update—into a reproducible open-source solution:
 >

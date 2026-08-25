@@ -26,7 +26,7 @@
 
 > **项目交流 QQ 群：930088487** —— 鸿蒙 dsh 适配、缓存优化、插件开发，欢迎加入交流。
 >
-> **新手教程**（在线版）：[点此打开 dsh-harmonyos-pc 新手安装教程](https://docs.google.com/document/d/1bH07I_Zj5r-kKytnZ7aj6hMTa1c5ZQdE/edit)
+> **新手教程**（在线版）：[点此打开 dsh-harmonyos-pc 新手安装教程](https://docs.google.com/document/d/1f3l-Q2Di6DmPy4xydYr4lUYIxmoOA014D63XNBTPSys/edit)
 
 > **群介绍**：让 DeepSeek Harness（dsh）在 HarmonyOS / 鸿蒙 设备上完整跑起来的全套适配方案。鸿蒙端几乎没人做这件事——原生 ELF/.node 模块、node-pty、Koffi 在这类设备上都加载不了。本仓库把「安装、打补丁、缓存优化、插件安装、自更新」一整套工程沉淀成可复刻的开源方案：
 >
