@@ -230,7 +230,7 @@ sh scripts/dsh-hm-update.sh check    # 只看状态不更新
 
 它做的事：
 1. **官方 dsh**：`npm view @deepseek-ai/dsh` 比对已装版本，有新版本就升级并重打鸿蒙 node_modules 补丁
-2. **本仓库**：以 `github.com/Entity-Him/dsh-harmonyos` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与 `plugins/@deepseek-ai/` 下的全部插件（如 `dsh-tool-list`、`dsh-deveco-bridge`）
+2. **本仓库**：以 `github.com/Entity-Him/dsh-harmonyos-pc` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与 `plugins/@deepseek-ai/` 下的全部插件（如 `dsh-tool-list`、`dsh-deveco-bridge`）
 3. **重启** dsh web，新预设即时生效
 
 更新会先把旧预设备份到 `~/.dsh/.dsh-harmonyos-backup/`，**不动** `~/.dsh/settings.yaml`、凭据与你的个性化配置。
