@@ -230,7 +230,7 @@ sh scripts/dsh-hm-update.sh check    # 只看状态不更新
 
 它做的事：
 1. **官方 dsh**：`npm view @deepseek-ai/dsh` 比对已装版本，有新版本就升级并重打鸿蒙 node_modules 补丁
-2. **本仓库**：以 `github.com/Entity-Him/dsh-harmonyos-pc` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与 `plugins/@deepseek-ai/` 下的全部插件（如 `dsh-tool-list`、`dsh-deveco-bridge`）
+2. **本仓库**：以 `github.com/QinpanWan/dsh-harmonyos-pc` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与 `plugins/@deepseek-ai/` 下的全部插件（如 `dsh-tool-list`、`dsh-deveco-bridge`）
 3. **重启** dsh web，新预设即时生效
 
 更新会先把旧预设备份到 `~/.dsh/.dsh-harmonyos-backup/`，**不动** `~/.dsh/settings.yaml`、凭据与你的个性化配置。
@@ -416,6 +416,14 @@ MIT License，见 [LICENSE](LICENSE)。
 ---
 
 ## 更新记录
+
+### 2026-08-28 — 兼容依赖防剪（fzstd/zstd-codec）+ 仓库更名同步
+
+官方 `0.1.1-rc.2` 重装验证中发现：`scripts/dsh-update.mjs` 用 npm 重装核心包时，会把不在依赖树里的 `fzstd`/`zstd-codec` 剪掉——它们是 `~/dsh-test/compat-loader.mjs`（node v22 鸿蒙运行时 polyfill）的依赖，剪掉后 dsh 启动即崩（`Cannot find module 'fzstd'`）、客户端显示 54 插件 pending。
+
+- **`scripts/dsh-update.mjs` 新增 `ensureCompatDeps()`**：`install` / `rollback` 装完核心包后自动校验，缺失即补齐 `fzstd`、`zstd-codec` 并写入 `~/dsh-test/package.json` 固化，后续官方更新不再踩。仅当本机存在 `compat-loader.mjs` 时生效，其余用户零影响。
+- **仓库更名同步**：`Entity-Him/dsh-harmonyos-pc` → `QinpanWan/dsh-harmonyos-pc`，已更新 `dsh-hm-update.mjs` 的 OWNER、README 与安装教程中的仓库地址（旧地址 GitHub 自动 301 跳转，兼容期仍可用）。
+- 鸿蒙补丁本体（`harmony.patch.yml` / `harmony-headless.patch.yml`）与五个 node_modules 补丁锚点对照 `0.1.1-rc.2` 均无需改动。
 
 ### 2026-08-24 — 跟进官方 0.1.1-rc.2（鸿蒙补丁零变化）
 
