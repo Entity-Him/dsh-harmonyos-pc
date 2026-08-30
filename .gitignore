@@ -2,3 +2,5 @@
 *.log
 *.pid
 .superpowers/
+*.bak-*
+*.dbg

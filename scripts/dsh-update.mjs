@@ -18,6 +18,15 @@ const CRED_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-credentials
 const SESS_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-session-persistence-jsonl', 'lib', 'index.js');
 const PERM_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-permission-presets', 'lib', 'index.js');
 const ATTACH_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-attachment-local', 'lib', 'index.js');
+// 0.1.2-alpha.2 起官方把裸插件名解析交给 node 内部 ESM loader(internal.import(name, baseUrl))；
+// 鸿蒙自带 node v22.7.0 的内部 loader 既无 getOrCreateModuleJob 也无 getModuleJobForImport，
+// ModuleLoader.fromInternal() 因此判定 shape 未知并返回 undefined → 裸插件名从 dsh-test 解析，
+// profile 里另装的社区插件全线 "Cannot find package"。需给 cordis-plugin-loader 补 v0(legacy) 分类。
+const CORDIS_LOADER_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'cordis-plugin-loader', 'lib', 'index.js');
+// 0.1.2-alpha.2 重设计 dsh-settings：移除 installSettingsSection / settingsNamespace 导出，迁至
+// SettingsProvider.installSection。社区插件(dsh-harmonyos-market/dshmarket/dsh-visual-plugin/
+// dsh-knowledge-base/dsh-workstation/dsh-hiboard-push)仍按旧 API 导入，需加兼容垫片。
+const SETTINGS_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-settings', 'lib', 'index.js');
 // dsh-visual-plugin（第三方，github.com/jyh20030112/dsh-visual-plugin）以源码形式落在 profile 树，
 // 经 dsh-hm-install.mjs 铺进 plugins-src 并软链到 node_modules；运行时入口是 lib/index.js。
 const VISUAL_FILE = join(HOME, '.dsh', 'profiles', 'web', 'plugins-src', 'dsh-visual-plugin', 'lib', 'index.js');
@@ -60,7 +69,8 @@ function readInstalled() {
   catch { return ''; }
 }
 // 官方 dist-tags.latest 可能滞后于实际发布（如 rc.8 已发布而 latest 停在 rc.7），
-// 因此遍历 versions 取数值最高的版本（rc.N 与稳定版均按数字比较）。
+// 因此遍历 versions 取数值最高的版本。版本解析为 5 元组 [maj,min,pa,stage,pre]：
+// alpha=1 / rc=2 / 正式版=3，使 dsh-v0.1.2-alpha.2 这类 alpha 预发布也能正确参与比较。
 function getLatest() {
   const r = npm('view', '@deepseek-ai/dsh', 'versions', '--json');
   if (!r.ok) throw new Error('npm view 失败: ' + tail(r.out));
@@ -68,12 +78,12 @@ function getLatest() {
   try { list = JSON.parse(r.out.trim()); } catch {}
   if (!Array.isArray(list) || !list.length) throw new Error('npm 未返回可用版本列表: ' + tail(r.out));
   const nums = (v) => {
-    const m = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?/.exec(String(v).trim());
-    return m ? [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4] || 0)] : null;
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|rc)\.(\d+))?/.exec(String(v).trim());
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === 'alpha' ? 1 : m[4] === 'rc' ? 2 : 3, Number(m[5] || 0)] : null;
   };
   const sorted = list.filter((v) => nums(v)).sort((a, b) => {
     const A = nums(a), B = nums(b);
-    for (let i = 0; i < 4; i++) if (A[i] !== B[i]) return A[i] - B[i];
+    for (let i = 0; i < 5; i++) if (A[i] !== B[i]) return A[i] - B[i];
     return 0;
   });
   return sorted[sorted.length - 1] || '';
@@ -179,14 +189,13 @@ function patchAttachment() {
     throw new Error('attachment 补丁锚点缺失(syncDirectory 只读句柄)，需手动处理: ' + ATTACH_FILE);
   }
   // 3) link EPERM → copyFile 回退。锚定为干净 link 段(仅捕获 EEXIST)。
-  const linkAnchor = '\t\t\tawait link(temporary, target);\n' +
-    '\t\t} catch (error) {\n' +
-    '\t\t\t/* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race. */\n' +
-    '\t\t\tif (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;\n' +
-    '\t\t\tif (digest(new Uint8Array(await readFile(target))) !== sha256) throw new AttachmentError("Stored attachment failed integrity verification.", "ATTACHMENT_CORRUPT");\n' +
-    '\t\t}';
-  if (patched.includes(linkAnchor)) {
-    patched = patched.replace(linkAnchor,
+  //    官方 0.1.2-alpha.2 打包产物把 sha256 函数重命名为 digest$1（rc.2 名为 digest），
+  //    故用正则同时适配两种命名，捕获的函数名在替换块中原样沿用。
+  const linkRe = /\t\t\tawait link\(temporary, target\);\n\t\t\} catch \(error\) \{\n\t\t\t\/\* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race\. \*\/\n\t\t\tif \(!\(error instanceof Error && "code" in error && error\.code === "EEXIST"\)\) throw error;\n\t\t\tif \((digest(?:\$1)?)\(new Uint8Array\(await readFile\(target\)\)\) !== sha256\) throw new AttachmentError\("Stored attachment failed integrity verification\.", "ATTACHMENT_CORRUPT"\);\n\t\t\}/;
+  const linkM = linkRe.exec(patched);
+  if (linkM) {
+    const dg = linkM[1];
+    patched = patched.slice(0, linkM.index) +
       '\t\t\tawait link(temporary, target);\n' +
       '\t\t} catch (error) {\n' +
       '\t\t\t/* HarmonyOS patch: 不支持硬链接的存储(如 Android/HarmonyOS)对 link() 报 EPERM，改按 copy 发布。 */\n' +
@@ -197,14 +206,15 @@ function patchAttachment() {
       '\t\t\t\t} catch (copyError) {\n' +
       '\t\t\t\t\t/* v8 ignore next -- copy 发布竞态与 link 相同：EEXIST 即视为已发布。 */\n' +
       '\t\t\t\t\tif (!(copyError instanceof Error && "code" in copyError && copyError.code === "EEXIST")) throw copyError;\n' +
-      '\t\t\t\t\tif (digest(new Uint8Array(await readFile(target))) !== sha256) throw new AttachmentError("Stored attachment failed integrity verification.", "ATTACHMENT_CORRUPT");\n' +
+      `\t\t\t\t\tif (${dg}(new Uint8Array(await readFile(target))) !== sha256) throw new AttachmentError("Stored attachment failed integrity verification.", "ATTACHMENT_CORRUPT");\n` +
       '\t\t\t\t}\n' +
       '\t\t\t} else if (error.code === "EEXIST") {\n' +
-      '\t\t\t\tif (digest(new Uint8Array(await readFile(target))) !== sha256) throw new AttachmentError("Stored attachment failed integrity verification.", "ATTACHMENT_CORRUPT");\n' +
+      `\t\t\t\tif (${dg}(new Uint8Array(await readFile(target))) !== sha256) throw new AttachmentError("Stored attachment failed integrity verification.", "ATTACHMENT_CORRUPT");\n` +
       '\t\t\t} else {\n' +
       '\t\t\t\tthrow error;\n' +
       '\t\t\t}\n' +
-      '\t\t}');
+      '\t\t}' +
+      patched.slice(linkM.index + linkM[0].length);
   } else if (!patched.includes('await copyFile(temporary, target, constants.COPYFILE_EXCL)')) {
     throw new Error('attachment 补丁锚点缺失(link 段)，需手动处理: ' + ATTACH_FILE);
   }
@@ -288,12 +298,68 @@ function patchVision() {
   writeFileSync(VISUAL_FILE, patched);
   return { changed: true };
 }
+// node 内部 ESM loader 形状识别：v2(getOrCreateModuleJob) / v1(getModuleJobForImport) 之外，
+// 还要兜底识别仅有 import/resolve/loadCache 的 legacy loader（node 22.7.0 鸿蒙自带）。
+// 否则 internal=undefined，profile 插件无法从 profile 目录解析，dsh 启动直接崩。
+function patchCordisLoader() {
+  const txt = readFileSafe(CORDIS_LOADER_FILE);
+  if (!txt) throw new Error('cordis-plugin-loader 文件不存在，需手动处理: ' + CORDIS_LOADER_FILE);
+  if (txt.includes(MARK)) return { changed: false };
+  const anchor = 'const version = typeof raw.getOrCreateModuleJob === "function" ? "v2" : typeof raw.getModuleJobForImport === "function" ? "v1" : void 0;';
+  if (!txt.includes(anchor)) throw new Error('cordis-loader 补丁锚点缺失(version shape)，需手动处理: ' + CORDIS_LOADER_FILE);
+  const replacement =
+    '/* HarmonyOS patch: node v22.7.0 内部 loader 无 getOrCreateModuleJob/getModuleJobForImport，\n' +
+    '\t\t\t\t\t\t\t\t\t\t\t\t * 官方识别返回 undefined 导致裸插件名从 dsh-test 解析 fail；有 import 即为可用 legacy loader，补 v0。 */\n' +
+    '\t\t\t\t\t\t\t\t\t\t\t\tconst version = typeof raw.getOrCreateModuleJob === "function" ? "v2" : typeof raw.getModuleJobForImport === "function" ? "v1" : typeof raw.import === "function" ? "v0" : void 0;';
+  writeFileSync(CORDIS_LOADER_FILE, txt.split(anchor).join(replacement));
+  return { changed: true };
+}
+// 恢复 dsh-settings 旧导出(settingsNamespace/installSettingsSection)，委托给新版
+// SettingsProvider.installSection，让沿用旧 API 的社区插件无需改源码即可在 0.1.2-alpha.2 运行。
+function patchSettingsCompat() {
+  const txt = readFileSafe(SETTINGS_FILE);
+  if (!txt) throw new Error('dsh-settings 文件不存在，需手动处理: ' + SETTINGS_FILE);
+  if (txt.includes(MARK)) return { changed: false };
+  const anchor = 'export { SettingsConflictError, SettingsProvider, SettingsProvider as default, redactSecrets };';
+  if (!txt.includes(anchor)) throw new Error('dsh-settings 补丁锚点缺失(export 行)，需手动处理: ' + SETTINGS_FILE);
+  const block =
+    '\n//#region HarmonyOS patch: restore exports removed upstream in 0.1.2-alpha.2\n' +
+    '// settingsNamespace 是命名空间品牌化助手；installSettingsSection 迁入 SettingsProvider.installSection。\n' +
+    '// 社区插件(dsh-harmonyos-market/dshmarket/dsh-visual-plugin/dsh-knowledge-base/dsh-workstation/dsh-hiboard-push)\n' +
+    '// 仍按旧 API 导入，保持可用。\n' +
+    'function settingsNamespace(value) {\n' +
+    '\tif (!NAMESPACE_PATTERN.test(value)) throw new TypeError(`settings namespace "${value}" must match ${String(NAMESPACE_PATTERN)}`);\n' +
+    '\treturn value;\n' +
+    '}\n' +
+    'function installSettingsSection(ctx, ns, schema, entry, hooks) {\n' +
+    '\tctx.inject(["settings"], (sctx) => {\n' +
+    '\t\tsctx.settings.installSection(ctx, ns, schema, entry, hooks);\n' +
+    '\t});\n' +
+    '}\n' +
+    '//#endregion\n';
+  const replacement = 'export { SettingsConflictError, SettingsProvider, SettingsProvider as default, deepEqualJson, installSettingsSection, redactSecrets, settingsNamespace };';
+  writeFileSync(SETTINGS_FILE, txt.split(anchor).join(block + replacement));
+  return { changed: true };
+}
 function patchAll() {
   const r1 = patchCredentials(), r2 = patchSession(), r3 = patchPermission(), r4 = patchAttachment(), r5 = patchVision();
-  for (const f of [CRED_FILE, SESS_FILE, PERM_FILE, ATTACH_FILE, VISUAL_FILE]) {
+  const r6 = patchCordisLoader(), r7 = patchSettingsCompat();
+  for (const f of [CRED_FILE, SESS_FILE, PERM_FILE, ATTACH_FILE, VISUAL_FILE, CORDIS_LOADER_FILE, SETTINGS_FILE]) {
     if (!readFileSafe(f).includes(MARK)) throw new Error('补丁校验失败(标记缺失): ' + f);
   }
-  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed };
+  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed };
+}
+
+// compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包：npm install 重装核心包时，
+// 它们不在依赖树里会被剪掉，剪掉后 dsh 启动即崩（Cannot find module 'fzstd'，2026-08-28 实测，
+// 客户端显示 54 插件 pending）。仅当本机存在 compat-loader 才补齐，其余用户零影响。
+function ensureCompatDeps() {
+  if (!existsSync(join(DSH_DIR, 'compat-loader.mjs'))) return 0;
+  const missing = ['fzstd', 'zstd-codec'].filter((p) => !readFileSafe(join(DSH_DIR, 'node_modules', p, 'package.json')));
+  if (missing.length === 0) return 0;
+  const r = npm('install', ...missing);
+  if (!r.ok) throw new Error('兼容依赖安装失败: ' + tail(r.out));
+  return missing.length;
 }
 
 // ---- 锁 / 重启 ----
@@ -338,10 +404,12 @@ export async function install() {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
+  const compat = ensureCompatDeps();
+  if (compat > 0) log('补齐兼容依赖: ' + compat + ' 个 (fzstd/zstd-codec)');
   log('安装完成 → ' + target);
   writeFileSync(PREV, before);
   const p = patchAll();
-  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在'));
+  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在') + ', cordisLoader=' + (p.cordisLoader ? '重打' : '已存在') + ', settingsCompat=' + (p.settingsCompat ? '重打' : '已存在'));
   const killed = stopDsh();
   if (killed > 0) log('已停旧 dsh 进程 ' + killed + ' 个');
   restartDsh();
@@ -362,6 +430,7 @@ async function rollback(version) {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
+  ensureCompatDeps();
   patchAll();
   stopDsh();
   restartDsh();

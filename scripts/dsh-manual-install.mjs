@@ -24,21 +24,23 @@ async function getManifest(name) {
   if (!res.ok) throw new Error(`manifest ${name} HTTP ${res.status}`);
   return res.json();
 }
+// 解析版本为 5 元组 [maj,min,pa,stage,pre]：alpha=1 / rc=2 / 正式版=3，同数字段下预发布号按 pre 比较，
+// 使 alpha < rc < 正式版（npm 语义），且 dsh-v0.1.2-alpha.2 这类 alpha 预发布也能参与排序与范围匹配。
 const numsOf = (v) => {
-  const m = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/.exec(String(v).trim());
-  return m ? [+m[1], +m[2], +m[3], +(m[4] || 0)] : null;
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|rc)\.(\d+))?$/.exec(String(v).trim());
+  return m ? [+m[1], +m[2], +m[3], m[4] === 'alpha' ? 1 : m[4] === 'rc' ? 2 : 3, +(m[5] || 0)] : null;
 };
-// 比较 [mj,mn,pa,rc]；rc 视为比正式版小（同数字段下 0 代表正式版）
-function cmpNums(a, b) { for (let i = 0; i < 4; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; }
-// 解析 range：支持 精确 / ^x.y.z[-rc.n] / ~x.y.z[-rc.n] / ^4 / ~4.1 等简写；
+// 比较 [maj,min,pa,stage,pre]
+function cmpNums(a, b) { for (let i = 0; i < 5; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1; return 0; }
+// 解析 range：支持 精确 / ^x.y.z[-alpha|rc.n] / ~x.y.z[-alpha|rc.n] / ^4 / ~4.1 等简写；
 // 无法解析的（>=、||、@^4 等）标为 unknown → 已装有则不重装，缺失则装最高版本。
 function parseRange(spec) {
   if (spec.startsWith('@')) spec = spec.slice(1);
   if (/^(\d+\.\d+\.\d+)/.test(spec)) return { kind: 'exact', nums: numsOf(spec) };
   if (spec[0] === '^' || spec[0] === '~') {
-    const base = spec.slice(1).match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-rc\.(\d+))?/);
+    const base = spec.slice(1).match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-(alpha|rc)\.(\d+))?/);
     if (base) {
-      return { kind: spec[0], nums: [+base[1], +(base[2] || 0), +(base[3] || 0), +(base[4] || 0)] };
+      return { kind: spec[0], nums: [+base[1], +(base[2] || 0), +(base[3] || 0), base[4] === 'alpha' ? 1 : base[4] === 'rc' ? 2 : 3, +(base[5] || 0)] };
     }
   }
   return { kind: 'unknown', nums: null };
@@ -75,8 +77,18 @@ function installedVersion(name) {
 function installedDeps(name) {
   try {
     const p = JSON.parse(readFileSync(join(NM, name, 'package.json'), 'utf8'));
-    return { deps: p.dependencies || {}, optional: p.optionalDependencies || {} };
-  } catch { return { deps: {}, optional: {} }; }
+    // 0.1.2-alpha.x 起官方大量把核心子包迁到 peerDependencies（dsh-util-time / dsh-attachment / dsh-llm 等），
+    // 直装器若只走 dependencies/optionalDependencies 会漏装 peer，导致启动报
+    // "Cannot find package '@deepseek-ai/dsh-util-time'" 与 "does not provide an export named ..."。
+    // 因此把非 optional 的 peerDependencies 也并入解析图（optional 的 peer 按 optionalDependencies 语义处理）。
+    const meta = p.peerDependenciesMeta || {};
+    const peers = {};
+    for (const [pn, ps] of Object.entries(p.peerDependencies || {})) {
+      if (meta[pn] && meta[pn].optional) continue;
+      peers[pn] = ps;
+    }
+    return { deps: p.dependencies || {}, optional: p.optionalDependencies || {}, peers };
+  } catch { return { deps: {}, optional: {}, peers: {} }; }
 }
 async function downloadTarball(url) {
   const res = await fetch(url, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -145,9 +157,10 @@ async function main() {
       installed++;
     }
 
-    const { deps, optional: opt } = installedDeps(name);
+    const { deps, optional: opt, peers } = installedDeps(name);
     for (const [dn, ds] of Object.entries(deps)) if (!seen.has(dn)) queue.push({ name: dn, spec: ds, optional: false });
     for (const [dn, ds] of Object.entries(opt)) if (!seen.has(dn)) queue.push({ name: dn, spec: ds, optional: true });
+    for (const [dn, ds] of Object.entries(peers)) if (!seen.has(dn)) queue.push({ name: dn, spec: ds, optional: false });
   }
 
   // 主包可能因 satisfies 误判被 keep，强制校验真实版本

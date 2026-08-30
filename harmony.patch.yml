@@ -14,6 +14,14 @@
 # 换 browse 变体,纯 JS 文件浏览,不需要原生模块。
 - id: directory-picker
   name: '@deepseek-ai/dsh-host-directory-picker-browse'
+# research-plugin 的 research 内核 sidecar 是 node 子进程, 在鸿蒙 exec-mmap 限制下
+# 无法监听 7412 变健康; 禁用避免 cordis:include 插件树整体加载失败。
+- id: research-plugin
+  disabled: true
+# 插件市场 dsh-market 重新启用(用户要); 无原生依赖+入口无 boot 期网络调用。
+- id: dsh-market
+  disabled: false
+
 # 委派子代理路由到 Pro（2026-08-17 实测：preset 的 agentOptions 未生效，子代理落回 flash；
 # 需在 profile 层按 id 整行替换才生效；headless 与 web 均已实测）。
 # 主循环 flash 便宜,复杂子任务 Pro 原生思考,一次做对省往返。
@@ -31,3 +39,38 @@
 - insert:
     - id: schedule
       name: '@deepseek-ai/dsh-schedule'
+
+# 皮肤互斥切换:蒙纳士蓝 · 演示模板(dsh-monash-skin)接管,其余皮肤禁用。
+- id: ui-skin-suzume
+  disabled: true
+- id: whale-girls
+  disabled: true
+- id: uiskin-theme
+  disabled: true
+- id: ui-skin-maid-atelier
+  disabled: true
+- id: ui-skin-manager
+  disabled: false
+- id: ui-skin-lulu
+  disabled: true
+- id: ui-skin-monash
+  disabled: false
+- id: ui-skin-capybara-ruru
+  disabled: true
+- id: ui-skin-prts
+  disabled: true
+- id: ui-skin-sky
+  disabled: true
+- id: ui-skin-lonetrail
+  disabled: true
+- id: ui-skin-wandering-earth
+  disabled: true
+- id: ui-skin-moss
+  disabled: true
+- id: ui-skin-alan-walker
+  disabled: true
+
+# v0.1.2-alpha.2: bridge-browser 依赖的 dsh-api-remotes 旧 API(ApiRemoteSessionNotFound)已被官方重设计移除，
+# 该浏览器桥暂时禁用；上游桥接插件适配新 API 后可重新启用。
+- id: bridge-browser
+  disabled: true

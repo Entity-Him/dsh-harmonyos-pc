@@ -275,12 +275,14 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-按内容锚点幂等重打五个补丁（新版本改代码也能识别），不打这五处：
+按内容锚点幂等重打七个补丁（新版本改代码也能识别），不打这七处：
 - 配不了模型 API key（凭据 660 权限检查）
 - 发消息 `EPERM link`（session 持久化）
 - 对话框没有权限预设下拉（permission-presets 需改读 fs 沙箱的 `sandboxMode`）
 - 读图存不下来（attachment-local：`link` 失败改 `copy` 发布 + 挂载点 fsync 容错）
 - 视觉识别报「模型未配置」/自定义 prompt 返回空文本（dsh-visual-plugin 回退到主视觉模型 + 空 content 重试降级）
+- 裸插件名从 `dsh-test` 解析不到（cordis-plugin-loader 需补 `v0` legacy 内部 loader 识别，鸿蒙 node v22.7.0 无 `getOrCreateModuleJob`/`getModuleJobForImport`）
+- `dsh-settings` 缺 `installSettingsSection`/`settingsNamespace` 旧导出（恢复导出并委托给 `SettingsProvider.installSection`，兼容沿用旧 API 的社区插件）
 
 ---
 
@@ -416,6 +418,15 @@ MIT License，见 [LICENSE](LICENSE)。
 ---
 
 ## 更新记录
+
+### 2026-08-31 — 跟进官方 0.1.2-alpha.2（3 处鸿蒙补丁）
+
+dsh 官方更新至 `0.1.2-alpha.2`（2026-08-30 发布），本地 dsh-test 已同步升级并验证 web 可启动。alpha.2 重构了插件解析与设置接口，鸿蒙补丁需对应补齐：
+
+- **`cordis-plugin-loader` 内部 ESM loader 识别**：官方 `ModuleLoader.fromInternal()` 只识别 `getOrCreateModuleJob`(v2) / `getModuleJobForImport`(v1) 两种 loader 形状；鸿蒙自带 node v22.7.0 的内部 loader 两个方法都没有，判定 shape 未知 → `loader.internal = undefined` → 裸插件名退化为从 `dsh-test/node_modules` 解析，profile 里另装的社区插件全线 `Cannot find package`，dsh 直接起不来。补 `v0`（有 `import` 即 legacy loader）分类后恢复从 profile 目录解析。
+- **`dsh-settings` 旧导出兼容垫片**：alpha.2 把 `installSettingsSection` / `settingsNamespace` 从 `@deepseek-ai/dsh-settings` 移除，迁入 `SettingsProvider.installSection`。社区插件 `dsh-harmonyos-market` / `dshmarket` / `dsh-visual-plugin` / `dsh-knowledge-base` / `dsh-workstation` / `dsh-hiboard-push` 仍按旧 API 导入 → 重新导出这两个符号并委托给新 `installSection`，插件无需改码即可运行。
+- **`harmony.patch.yml` 禁用 `bridge-browser`**：该浏览器桥依赖的 `@deepseek-ai/dsh-api-remotes` 旧 API（`ApiRemoteSessionNotFound`）被官方整体重设计移除，无法低成本垫片，暂禁浏览器桥；上游适配新 API 后重新启用。
+- 验证：dsh web 在 3080 正常返回 token 认证 303/前端可访问，`codex-bridge` / `deveco-bridge`(6 工具) / `cron` / `peak-valley` / `cost-meter` / `evoresearch` 均加载。
 
 ### 2026-08-30 — harmony-chat-ops 内置 cron 定时任务
 

@@ -246,12 +246,14 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-Re-applies the five patches idempotently using content anchors (recognizes code changes in new versions). Without these five patches:
+Re-applies the seven patches idempotently using content anchors (recognizes code changes in new versions). Without these seven patches:
 - Can't configure a model API key (credential 660 permission check)
 - Sending messages errors with `EPERM link` (session persistence)
 - No permission-preset dropdown in the dialog (`dsh-permission-presets` must read `sandboxMode` from the fs sandbox)
 - Image reading can't persist (attachment-local: `link`→`copy` publish + mount-point fsync tolerance)
 - Vision reports "model not configured" / custom prompt returns empty text (dsh-visual-plugin falls back to the main vision model + empty-content retry/degrade)
+- Bare plugin names resolve from `dsh-test` and fail (`cordis-plugin-loader` needs a `v0` legacy internal-loader shape for HarmonyOS node v22.7.0, which lacks `getOrCreateModuleJob`/`getModuleJobForImport`)
+- `dsh-settings` lacks the old `installSettingsSection`/`settingsNamespace` exports (restore them and delegate to `SettingsProvider.installSection` for community plugins on the old API)
 
 ---
 
