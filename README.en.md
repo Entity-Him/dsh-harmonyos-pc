@@ -111,7 +111,7 @@ All seven modes can be freely switched at any time in the "conversation mode" dr
 | `harmony-chat` (base) | Normal | Runtime context enabled (prefix varies) | Single Agent |
 | `harmony-chat-pro` (cache-optimized) | `complete:true` unique prompt section | Zero prefix change, maximum hit rate | Single Agent, planning discipline built in |
 | `harmony-chat-promax` (strongest Hexagon delivery) | `complete:false` | Runtime context disabled, long stable prefix | + Subagents / workflows / Ralph delegation group + six hard delivery rules |
-| `harmony-chat-ops` (task steward) | Resident background task steward | Runtime context disabled, stable prefix | + Scheduled tasks (schedule_create/list/delete) + directory enumeration (list_dir) |
+| `harmony-chat-ops` (task steward) | Resident background task steward | Runtime context disabled, stable prefix | + Scheduled tasks (cron_create/list/set_enabled/delete + schedule_create/list/delete) + directory enumeration (list_dir) |
 | `harmony-chat-rampagemax` (Rampage Max) | No token savings, quality and delivery first | Runtime context enabled (prefix varies) + web fetching fully enabled | + Delegation group (all Pro) + exhaustive pre-check / double verification / retrospective iron rules |
 | `harmony-chat-rampagemax` (Rampage Max, use with caution) | No token savings, quality and delivery first | **Runtime context enabled**, dynamic prefix, low hit rate | All promax capabilities + web fetch fully enabled + double verification/cross-checking + full-Pro delegation + exhaustive pre-check scan |
 | `harmony-kb` (knowledge-base expert) | Workspace-as-knowledge-base: layered retrieval / deep research / doc organization / mind maps / notes | Runtime context disabled, stable prefix | + directory enumeration (list_dir) + Obsidian wikilink note push |
@@ -354,6 +354,14 @@ This project does not include dsh source code; it only contains independently wr
 
 ## Changelog
 
+### 2026-08-30 — Built-in cron scheduled tasks for harmony-chat-ops
+
+**The `harmony-chat-ops` resident background task steward gains full cron scheduling**:
+
+- **Standard cron syntax**: new `cron_create` (standard 5-field cron "min hour day month weekday", with `@daily/@weekly/@monthly/@hourly` shortcuts and `JAN..DEC`/`SUN..SAT` names; when both day and weekday are restricted, either match triggers) + `cron_next` (validate the expression against the user's intent before creating) + management tools `cron_list` / `cron_set_enabled` / `cron_delete`; timezone defaults to `Asia/Shanghai`, overridable via `time_zone`.
+- **`[CRON TASK]` framing semantics**: due tasks are delivered as untrusted task text (not new instructions); the agent executes and archives to `~/dsh-kb/` when idle. Tasks bind to the creating session—triggered on time while online, marked `overdue` offline, and only the latest missed run is backfilled on resume (no replay of backlog).
+- **Backward compatible**: the old `schedule_create / schedule_list / schedule_delete` (after/at/every) remain available.
+
 ### 2026-08-22 — Fixed image reading and vision recognition (attachment-local + dsh-visual-plugin patches)
 
 On this device, dragging an image into DeepSeek Harness then having the model see and describe it used to break at two levels: the image couldn't persist, and the vision endpoint wasn't configured.
@@ -417,7 +425,7 @@ The benchmark expanded from 6 questions to 6 axes × 2 questions = 12 auto-grade
 
 **New features**
 
-- **The `harmony-chat-ops` resident background task steward preset**: an unattended task mode for HarmonyOS devices, pure JS with zero native dependencies. Three categories of duties—knowledge organization (read directory → extract → deduplicate → archive to `~/dsh-kb/`), batch file processing (rename/archive/deduplicate → manifest to `~/dsh-kb/logs/`), and scheduled reports (auto-generated to `~/dsh-kb/reports/` when due). Things outside these three categories are first confirmed with the user.
+- **The `harmony-chat-ops` resident background task steward preset**: an unattended task mode for HarmonyOS devices, pure JS with zero native dependencies. Three categories of duties—knowledge organization (read directory → extract → deduplicate → archive to `~/dsh-kb/`), batch file processing (rename/archive/deduplicate → manifest to `~/dsh-kb/logs/`), and scheduled tasks (standard cron expressions via `cron_create` + `schedule_create` every/at, executed and archived when idle). Things outside these three categories are first confirmed with the user.
 - **`@deepseek-ai/dsh-tool-list` directory enumeration plugin**: dsh's fs service has no readdir, so the ops mode cannot discover directory contents. This adds a zero-dependency `list_dir` tool (`node:fs/promises`) supporting relative paths, file sizes, and a 200-entry limit.
 - **`harmony.patch.yml` mounts dsh-schedule for scheduled tasks**: registers `schedule_create / schedule_list / schedule_delete` for the web session's root agent (the package ships with dsh's base installation); one-shot/periodic reminders auto-trigger when due, and the agent executes and archives them when idle.
 - **Delegated subagents route to Pro**: overrides `tool-subagent`'s `agentOptions` entirely by id to `deepseek-v4-pro` (measured: agentOptions inside presets don't take effect; the profile-layer override is required). The flash main loop saves cost; complex subtasks go to Pro to be done right the first time, avoiding repeated trial-and-error round trips.

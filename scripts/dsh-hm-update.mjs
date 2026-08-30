@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
 const HOME = homedir();
-const OWNER = 'QinpanWan';
+const OWNER = 'Entity-Him';
 const REPO_NAME = 'dsh-harmonyos-pc';
 const NODE = process.env.NODE_BIN || '/data/service/hnp/node.org/node_v24.13.0/bin/node';
 const UA = 'dsh-hm-update/0.1';

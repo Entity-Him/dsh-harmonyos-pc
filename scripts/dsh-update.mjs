@@ -296,18 +296,6 @@ function patchAll() {
   return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed };
 }
 
-// compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包：npm install 重装核心包时，
-// 它们不在依赖树里会被剪掉，剪掉后 dsh 启动即崩（Cannot find module 'fzstd'，2026-08-28 实测，
-// 客户端显示 54 插件 pending）。仅当本机存在 compat-loader 才补齐，其余用户零影响。
-function ensureCompatDeps() {
-  if (!existsSync(join(DSH_DIR, 'compat-loader.mjs'))) return 0;
-  const missing = ['fzstd', 'zstd-codec'].filter((p) => !readFileSafe(join(DSH_DIR, 'node_modules', p, 'package.json')));
-  if (missing.length === 0) return 0;
-  const r = npm('install', ...missing);
-  if (!r.ok) throw new Error('兼容依赖安装失败: ' + tail(r.out));
-  return missing.length;
-}
-
 // ---- 锁 / 重启 ----
 function acquireLock() {
   try { writeFileSync(LOCK, String(process.pid), { flag: 'wx' }); return true; }
@@ -350,8 +338,6 @@ export async function install() {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
-  const compat = ensureCompatDeps();
-  if (compat > 0) log('补齐兼容依赖: ' + compat + ' 个 (fzstd/zstd-codec)');
   log('安装完成 → ' + target);
   writeFileSync(PREV, before);
   const p = patchAll();
@@ -376,7 +362,6 @@ async function rollback(version) {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
-  ensureCompatDeps();
   patchAll();
   stopDsh();
   restartDsh();

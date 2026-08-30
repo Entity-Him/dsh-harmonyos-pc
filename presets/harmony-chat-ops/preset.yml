@@ -1,3 +1,3 @@
 name: 鸿蒙任务管家
-description: 常驻后台任务模式 —— 知识整理（读目录→提取→去重→归档 ~/dsh-kb）、批量文件处理（重命名/归档/去重→清单）、定时报告（schedule_create every/at，空闲自动执行）。纯 JS，无原生依赖。
+description: 常驻后台任务模式 —— 知识整理（读目录→提取→去重→归档 ~/dsh-kb）、批量文件处理（重命名/归档/去重→清单）、定时任务（cron_create 标准 cron 表达式 + schedule_create every/at，空闲自动执行）。纯 JS，无原生依赖。
 order: 4

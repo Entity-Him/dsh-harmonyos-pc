@@ -2,7 +2,7 @@
 
 在 HarmonyOS / 鸿蒙 设备上完整跑起 DeepSeek Harness（dsh）
 
-适用设备：HarmonyOS（arm64）｜配套版本：dsh 0.1.1-rc.2（2026-08-24 跟进）｜项目仓库：github.com/QinpanWan/dsh-harmonyos-pc
+适用设备：HarmonyOS（arm64）｜配套版本：dsh 0.1.1-rc.2（2026-08-24 跟进）｜项目仓库：github.com/Entity-Him/dsh-harmonyos-pc
 
 ## 1. 这是什么
 
@@ -27,7 +27,7 @@ dsh-harmonyos-pc 让 DeepSeek Harness（dsh）在鸿蒙设备上完整跑起来�
 ## 3. 第 1 步：获取仓库
 
 ```bash
-git clone https://github.com/QinpanWan/dsh-harmonyos-pc.git
+git clone https://github.com/Entity-Him/dsh-harmonyos-pc.git
 cd dsh-harmonyos-pc
 ```
 
@@ -158,7 +158,7 @@ sh scripts/dsh-hm-update.sh          # 一键更新并重启
 sh scripts/dsh-hm-update.sh check    # 只看状态不更新
 ```
 
-它做的事：① 官方 dsh：`npm view @deepseek-ai/dsh` 比对已装版本，有新版本就升级并重打鸿蒙 node_modules 补丁；② 本仓库：以 `github.com/QinpanWan/dsh-harmonyos-pc` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与全部自定义插件；③ 重启 dsh web，新预设即时生效。更新会先把旧预设备份到 `~/.dsh/.dsh-harmonyos-backup/`，**不动** `~/.dsh/settings.yaml`、凭据与你的个性化配置。
+它做的事：① 官方 dsh：`npm view @deepseek-ai/dsh` 比对已装版本，有新版本就升级并重打鸿蒙 node_modules 补丁；② 本仓库：以 `github.com/Entity-Him/dsh-harmonyos-pc` main 分支的 commit SHA 判定版本（写入 `~/.dsh/.dsh-harmonyos.version`），有更新就从 codeload 下载 tarball，同步 `presets/`、`plugins/`、`scripts/`、`harmony*.patch.yml` 到本机仓库副本，并重新部署预设与全部自定义插件；③ 重启 dsh web，新预设即时生效。更新会先把旧预设备份到 `~/.dsh/.dsh-harmonyos-backup/`，**不动** `~/.dsh/settings.yaml`、凭据与你的个性化配置。
 
 旧式/手动管理也可用：
 

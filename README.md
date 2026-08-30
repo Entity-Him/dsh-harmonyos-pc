@@ -112,7 +112,7 @@ agent-presets:
 | `harmony-chat`（基础） | 常规 | 开运行上下文（前缀易变） | 单 Agent |
 | `harmony-chat-pro`（缓存极致） | `complete:true` 唯一提示段 | 前缀零变化，命中率极限 | 单 Agent，计划纪律内建 |
 | `harmony-chat-promax`（六边形交付最强） | `complete:false` | 关闭运行上下文，长稳定前缀 | + 子代理 / 工作流 / Ralph 委派组 + 六条交付硬规则 |
-| `harmony-chat-ops`（任务管家） | 常驻后台任务管家 | 关闭运行上下文，前缀稳定 | + 定时调度（schedule_create/list/delete）+ 目录枚举（list_dir） |
+| `harmony-chat-ops`（任务管家） | 常驻后台任务管家 | 关闭运行上下文，前缀稳定 | + 定时任务（cron_create/list/set_enabled/delete + schedule_create/list/delete）+ 目录枚举（list_dir） |
 | `harmony-chat-rampagemax`（狂暴 Max） | 不省 token 只讲质量与交付 | 开运行上下文（前缀易变）+ 网页抓取全开 | + 委派组（全 Pro）+ 预检穷尽 / 双重验证 / 复盘铁律 |
 | `harmony-chat-rampagemax`（狂暴Max，慎用） | 不省 token 只讲质量与交付 | **打开**运行上下文，前缀动态、命中率低 | 全部 promax 能力 + 网页 fetch 全开 + 双重验证/交叉互证 + 委派全量 Pro + 预检穷尽扫描 |
 | `harmony-kb`（知识库专家） | 工作区即知识库：分层检索 / 深度研究 / 文档整理 / 脑图 / 笔记 | 关闭运行上下文，前缀稳定 | + 目录枚举（list_dir）+ Obsidian 双链笔记推送 |
@@ -417,6 +417,14 @@ MIT License，见 [LICENSE](LICENSE)。
 
 ## 更新记录
 
+### 2026-08-30 — harmony-chat-ops 内置 cron 定时任务
+
+**`harmony-chat-ops` 常驻后台任务管家升级为完整定时任务**：
+
+- **标准 cron 定时**：新增 `cron_create`（标准 5 段 cron 表达式「分 时 日 月 星期」，支持 `@daily/@weekly/@monthly/@hourly` 快捷方式与 `JAN..DEC`/`SUN..SAT` 名称，日与星期同时受限按任一匹配）+ `cron_next`（创建前校验表达式是否符合用户意图）+ 管理工具 `cron_list` / `cron_set_enabled` / `cron_delete`；时区默认 `Asia/Shanghai`，可传 `time_zone` 覆盖。
+- **`[CRON TASK]` 触发语义**：到期投递的是不可信任务文本（非新指令），agent 空闲时按任务要求执行并归档到 `~/dsh-kb/`；任务绑定创建会话，在线准时触发、离线标记 `overdue`，恢复后只补最新一次、不回放积压。
+- **向后兼容**：旧 `schedule_create / schedule_list / schedule_delete`（after/at/every）仍可用。
+
 ### 2026-08-28 — 兼容依赖防剪（fzstd/zstd-codec）+ 仓库更名同步
 
 官方 `0.1.1-rc.2` 重装验证中发现：`scripts/dsh-update.mjs` 用 npm 重装核心包时，会把不在依赖树里的 `fzstd`/`zstd-codec` 剪掉——它们是 `~/dsh-test/compat-loader.mjs`（node v22 鸿蒙运行时 polyfill）的依赖，剪掉后 dsh 启动即崩（`Cannot find module 'fzstd'`）、客户端显示 54 插件 pending。
@@ -537,7 +545,7 @@ dsh 官方更新至 `0.1.0-rc.7`（DeepSeek 群聊发布），本仓库移植版
 
 **新增功能**
 
-- **`harmony-chat-ops` 常驻后台任务管家预设**：鸿蒙设备上的无人值守任务模式，纯 JS、零原生依赖。三类职责——知识整理（读目录 → 提取 → 去重 → 归档 `~/dsh-kb/`）、批量文件处理（重命名/归档/去重 → 清单到 `~/dsh-kb/logs/`）、定时报告（到点自动生成 `~/dsh-kb/reports/`）。超出三类的事先询问用户。
+- **`harmony-chat-ops` 常驻后台任务管家预设**：鸿蒙设备上的无人值守任务模式，纯 JS、零原生依赖。三类职责——知识整理（读目录 → 提取 → 去重 → 归档 `~/dsh-kb/`）、批量文件处理（重命名/归档/去重 → 清单到 `~/dsh-kb/logs/`）、定时任务（cron_create 标准 cron 表达式 + schedule_create every/at，空闲自动执行并归档）。超出三类的事先询问用户。
 - **`@deepseek-ai/dsh-tool-list` 目录枚举插件**：dsh 的 fs 服务没有 readdir，导致 ops 模式无法发现目录内容。补一个零依赖 `list_dir` 工具（`node:fs/promises`），支持相对路径、文件大小、200 条上限。
 - **`harmony.patch.yml` 挂载 dsh-schedule 定时调度**：为 web 会话根 agent 注册 `schedule_create / schedule_list / schedule_delete`（包随 dsh 基础安装自带），一次性/周期提醒到点自动触发，agent 空闲时自动执行并归档。
 - **委派子代理路由到 Pro**：按 id 整行覆盖 `tool-subagent` 的 `agentOptions` 为 `deepseek-v4-pro`（实测 preset 内的 agentOptions 不生效，需 profile 层覆盖）。主循环 flash 省成本，复杂子任务 Pro 一次做对，省去反复试错往返。
