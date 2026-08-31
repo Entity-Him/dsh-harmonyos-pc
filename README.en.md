@@ -38,6 +38,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 > - **Measured token savings**: an A/B benchmark over 11 tasks verifies `reasoningEffort: high` as Pareto-optimal (all correct + fewest steps + nearly unchanged cost), with the promax delegation group routing complex subtasks to a Pro model as fallback
 > - **Five-preset benchmark (2026-08-18)**: after static persona padding (prefix crosses the 128-token chunk boundary), the static-prefix presets' cache hit rate rose from 52.9%–89.9% to **93.8%–98.0%** (promax 96.7%, ops 97.9%, rampagemax 98.0%), and even harmony-chat with runtime context enabled was pulled up to 93.8%—data confirming that "to preserve the cache, keep the prefix stable first" (see "Performance Benchmarks" below)
 > - **Toolchain**: one-click GitHub plugin installer, dsh self-updater + settings page
+> - **Global prompt-antivirus `dsh-prompt-antivirus`** (added 2026-08-31): scans tool arguments / tool results / messages before they enter the model, quarantining or blocking prompt injection and "context-virus" payloads; injects a per-session canary guard and routes high-risk dangerous tools through human approval—mounted at the profile layer, active globally across all presets and subagents
 
 - **Seven HarmonyOS "conversation mode" Agent presets**: push DeepSeek's prefix cache hit rate to the maximum while retaining task delivery capability—`harmony-chat` (minimal) / `harmony-chat-pro` (cache-optimized) / `harmony-chat-promax` (strongest Hexagon delivery) / `harmony-chat-ops` (resident background task steward) / `harmony-chat-rampagemax` (Rampage Max quality) / `harmony-kb` (knowledge-base expert) / `harmony-deveco` (DevEco full-stack development master)
 - **Hexagon ProMax** (upgraded 2026-08-18): six hard rules in one place—cache hit, token savings, delivery capability, test verification, integration loop, coexistence defense—turning the gap between "code written" and "system running" into a mechanical checklist, with delivery discipline benchmarked against and exceeding mainstream general-purpose Agents
@@ -48,6 +49,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 - **Measured token savings**: an A/B benchmark over 11 tasks verifies `reasoningEffort: high` as Pareto-optimal (all correct + fewest steps + nearly unchanged cost), with the promax delegation group routing complex subtasks to a Pro model as fallback
 - **Five-preset benchmark (2026-08-18)**: after static persona padding (prefix crosses the 128-token chunk boundary), the static-prefix presets' cache hit rate rose from 52.9%–89.9% to **93.8%–98.0%** (promax 96.7%, ops 97.9%, rampagemax 98.0%), and even harmony-chat with runtime context enabled was pulled up to 93.8%—data confirming that "to preserve the cache, keep the prefix stable first" (see "Performance Benchmarks" below)
 - **Toolchain**: one-click GitHub plugin installer, dsh self-updater + settings page
+- **Global prompt-antivirus `dsh-prompt-antivirus`** (added 2026-08-31): scans tool arguments / tool results / messages before they enter the model, quarantining or blocking prompt injection and "context-virus" payloads smuggled inside `[CRON TASK]` / `[SCHEDULE REMINDER]` / web-search results / file contents; injects a per-session canary guard and routes high-risk dangerous tools through human approval; `block` / `quarantine` / `monitor` modes plus local audit logging—mounted at the profile layer, active globally across all presets and subagents, pure JS with zero dependencies
 
 ---
 
@@ -355,6 +357,16 @@ This project does not include dsh source code; it only contains independently wr
 ---
 
 ## Changelog
+
+### 2026-08-31 — Global prompt-antivirus dsh-prompt-antivirus (context-virus defense)
+
+Ported the principle of `openclaw-prompt-antivirus` (runtime defense against prompt injection / mind-virus attacks) onto dsh as a profile-layer global plugin:
+
+- **Four hook layers**: `tools/pre-execute` scans tool arguments (deny on high risk, human approval for dangerous tools), `tools/post-execute` scans tool results (where indirect injection hides; block/quarantine), `agent/pre-step` scans messages before they enter the model (`[CRON TASK]` / `[SCHEDULE REMINDER]` / web-search / file-content payloads are quarantined before reaching the model) plus a one-time per-session canary guard, and `llm/stream` sanitizes outbound text and detects canary hits (interrupts output in block mode).
+- **Three modes**: `quarantine` (default; rewrites matched spans where in-place replacement is possible) / `block` (stricter + canary interrupt) / `monitor` (audit-only).
+- **Tools & audit**: `_antivirus_scan` / `_antivirus_status` available per session; audit written to `~/.dsh/task-board/prompt-antivirus-audit.jsonl` (500-entry ring + 2 MB file cap, fail-silent).
+- **Install**: shipped as `plugins/dsh-prompt-antivirus/`; `scripts/dsh-prompt-antivirus-install.mjs` installs it into the web + headless profiles idempotently (source → plugins-src + symlinks + manifest registration); `dsh-hm-update.mjs` auto-deploys all profile-level plugins under `plugins/`.
+- **Validation**: 32 unit + harness tests green (signature coverage/severity, no false positives on benign Chinese text, three-mode decisions, one-time canary injection per session, canary interrupt/removal in the stream).
 
 ### 2026-08-30 — Built-in cron scheduled tasks for harmony-chat-ops
 

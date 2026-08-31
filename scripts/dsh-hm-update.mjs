@@ -10,6 +10,7 @@ import {
 import { homedir } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installProfilePlugin } from './dsh-prompt-antivirus-install.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..');
@@ -144,6 +145,23 @@ function deployPlugins(top) {
   return n;
 }
 
+// 部署 tarball plugins/ 下的 profile 级插件（非 @deepseek-ai 作用域，如 dsh-prompt-antivirus）：
+// 复用 installProfilePlugin —— 源码进 web profile plugins-src + 软链 + 清单注册 + headless 补丁。
+function deployProfilePlugins(top) {
+  const srcRoot = join(top, 'plugins');
+  if (!existsSync(srcRoot)) return 0;
+  let n = 0;
+  for (const pkg of readdirSync(srcRoot)) {
+    if (pkg === '@deepseek-ai') continue;
+    const src = join(srcRoot, pkg);
+    if (!statSync(src).isDirectory() || !existsSync(join(src, 'package.json'))) continue;
+    log(`  部署 profile 插件 ${pkg} …`);
+    installProfilePlugin({ pluginDir: src, pluginName: pkg, profilesRoot: join(HOME, '.dsh', 'profiles') });
+    n++;
+  }
+  return n;
+}
+
 // ---- 重启 ----
 function stopDsh() {
   const r = runSh('ps -ef 2>/dev/null | grep -F "dsh/lib/bin.js" | grep -v grep | awk \'{print $2}\'');
@@ -215,6 +233,8 @@ async function update() {
       const npl = deployPlugins(top);
       if (npl > 0) log(`  部署插件 ${npl} 个（基础 node_modules + profile 软链）`);
       else log('  ⚠ tarball 里没有插件目录，跳过');
+      const npp = deployProfilePlugins(top);
+      if (npp > 0) log(`  部署 profile 级插件 ${npp} 个（plugins-src + 软链 + 清单注册）`);
       writeSafe(VERSION_FILE, remote);
       repoChanged = true;
     } finally {

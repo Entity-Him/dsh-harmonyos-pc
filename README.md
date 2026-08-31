@@ -38,6 +38,7 @@
 > - **省 token 优化实测**：11 道基准 A/B 验证 `reasoningEffort: high` 为帕累托最优（全对 + 步数最少 + 成本几乎不变），promax 委派组挂 Pro 模型路由兜底复杂子任务
 > - **五套预设跑分（2026-08-18）**：经静态 persona 填充（前缀越过 128-token 块边界），静态前缀预设缓存命中率 52.9%–89.9% → **93.8%–98.0%**（promax 96.7%、ops 97.9%、rampagemax 98.0%），连开运行上下文的 harmony-chat 也拉到 93.8%——用数据印证「保缓存先保前缀稳定」（详见下方「性能实测」）
 > - **工具链**：GitHub 插件一键安装器、dsh 自更新器 + 设置页
+> - **全局防注入 `dsh-prompt-antivirus`**（2026-08-31 新增）：扫描工具参数 / 工具结果 / 进入模型前的消息，隔离或拦截提示注入与「上下文病毒」，每会话注入金丝雀守卫，危险工具走人工审批——profile 层挂载，对全部预设与子代理全局生效
 
 - **七套「鸿蒙对话模式」Agent 预设**：把 DeepSeek 前缀缓存命中率拉到最高，同时保留任务交付能力——`harmony-chat`（极简）/ `harmony-chat-pro`（缓存极致）/ `harmony-chat-promax`（六边形交付最强）/ `harmony-chat-ops`（常驻后台任务管家）/ `harmony-chat-rampagemax`（狂暴质量）/ `harmony-kb`（知识库专家）/ `harmony-deveco`（DevEco 全链路开发大师）
 - **六边形 ProMax**（2026-08-18 升级）：缓存命中 / 省 token / 交付能力 / 测试验证 / 集成闭环 / 共存防御六条硬规则同场，把「写完代码」与「系统跑起来」之间的鸿沟写成机械清单，交付纪律对标并反超主流通用 Agent
@@ -49,6 +50,7 @@
 - **省 token 优化实测**：11 道基准 A/B 验证 `reasoningEffort: high` 为帕累托最优（全对 + 步数最少 + 成本几乎不变），promax 委派组挂 Pro 模型路由兜底复杂子任务
 - **五套预设跑分（2026-08-18）**：经静态 persona 填充（前缀越过 128-token 块边界），静态前缀预设缓存命中率 52.9%–89.9% → **93.8%–98.0%**（promax 96.7%、ops 97.9%、rampagemax 98.0%），连开运行上下文的 harmony-chat 也拉到 93.8%——用数据印证「保缓存先保前缀稳定」（详见下方「性能实测」）
 - **工具链**：GitHub 插件一键安装器、dsh 自更新器 + 设置页
+- **全局防注入 `dsh-prompt-antivirus`**（2026-08-31 新增）：扫描工具参数 / 工具结果 / 进入模型前的消息，隔离或拦截提示注入与「上下文病毒」（`[CRON TASK]` / `[SCHEDULE REMINDER]` / 网页检索 / 文件内容里夹带的恶意指令），每会话注入金丝雀守卫，危险工具命中高危时走人工审批；`block` / `quarantine` / `monitor` 三模式 + 本地审计，profile 层挂载对全部预设与子代理全局生效，纯 JS 零依赖
 
 ---
 
@@ -75,6 +77,7 @@
 - **不动你的数据**：预设只改 dsh 的「对话模式」配置；插件只做目录列举与文件读取；补丁只开关 dsh 自己的插件行。不会删除、覆盖、加密或外传你的文件。
 - **网络行为最小**：只在启动 dsh 时加载配置、在你主动发起对话/检查更新时访问 DeepSeek 与 GitHub 官方接口。无遥测、无埋点、无数据上报。
 - **完全可审阅**：全仓库仅 20 余个文本文件，任何一行都可打开检查。
+- **防注入插件只做本地扫描**：`dsh-prompt-antivirus` 只在本机对工具参数 / 工具结果 / 会话消息做正则扫描，审计日志写到本地 `~/.dsh/task-board/prompt-antivirus-audit.jsonl`；不联网、不读取未进入会话的磁盘文件、不上传任何内容。
 - **可逆卸载**：删除 `~/.dsh/.agent-presets/` 下用到的预设目录（如 `harmony-chat-ops/`、`harmony-kb/`、`harmony-deveco/`）、`~/dsh-test/node_modules/@deepseek-ai/dsh-tool-list/` 与 `@deepseek-ai/dsh-deveco-bridge/` 及 profile 层对应软链，重启 dsh 即完全还原。
 
 ---
@@ -194,6 +197,26 @@ ln -s ~/dsh-test/node_modules/@deepseek-ai/dsh-deveco-bridge ~/.dsh/profiles/nod
 > **工具路径**：插件默认到 `$HOME/deveco/deveco_tools/` 找 node/hvigor/sdk/ohpm（DevEco Studio 默认安装位置）；自定义安装用 `DEVECO_TOOLS_HOME` 整体指路，或 `DEVECO_NODE_HOME` / `DEVECO_HVIGOR_HOME` / `DEVECO_SDK_HOME` / `DEVECO_OHPM_BIN` / `DEVECO_HDC_BIN` 逐项覆盖。
 >
 > **`dev_code` 委托**：把自包含深子任务交给本机 DevEco Code 代理（OpenCode web，127.0.0.1:4096）跑独立 agent 循环。用前需先启动 DevEco Code 并配好 DeepSeek（`~/.deveco/deveco.jsonc`），地址可用 `DEVECO_WEB_BASE` 覆盖。每次委托约 13K 输入 token、串行执行，只对深子任务用（功耗纪律见预设人设）。
+
+### 2.8 安装全局防注入（可选但推荐）
+
+仓库内置 `plugins/dsh-prompt-antivirus/`（原理移植自 `openclaw-prompt-antivirus`，按 dsh 钩子面接线）：
+
+| 防线 | dsh 钩子 | 行为 |
+| --- | --- | --- |
+| 工具参数扫描（直接注入） | `tools/pre-execute` | 高危 → 拒绝；高危 + 危险工具（`send_email` / `apply_patch` / `delete_*` 等）→ 人工审批 |
+| 工具结果扫描（间接注入） | `tools/post-execute` | `block` 转 isError / `quarantine` 替换命中片段 |
+| 进入模型前的消息扫描 | `agent/pre-step` | 高危消息进入前隔离；每会话注入一次金丝雀守卫 |
+| 出站消毒 / 金丝雀检测 | `llm/stream` | 金丝雀命中 → block 模式中断输出；出站注入片段 → 替换 |
+
+安装（幂等，重复执行安全；装完重启 dsh 生效）：
+
+```bash
+cd ~/dsh-harmonyos-pc && node scripts/dsh-prompt-antivirus-install.mjs
+sh scripts/dsh-web.sh
+```
+
+已内置 `dsh-hm-update.mjs` 自动部署：以后 `node scripts/dsh-hm-update.mjs` 更新时会自动把 `plugins/` 下的 profile 级插件同步到 web + headless profile。模式可在插件源码 `lib/index.js` 的 `DEFAULT_CONFIG` 调整（`quarantine` 默认 / `block` / `monitor`），`_antivirus_scan` / `_antivirus_status` 两个诊断工具随会话可用。
 
 ### 3. 启动 dsh（带鸿蒙补丁）
 
@@ -418,6 +441,16 @@ MIT License，见 [LICENSE](LICENSE)。
 ---
 
 ## 更新记录
+
+### 2026-08-31 — 全局防注入 dsh-prompt-antivirus（防「上下文病毒」）
+
+把 `openclaw-prompt-antivirus`（提示注入 / mind-virus 运行时防御）的原理移植到 dsh，做成 profile 层全局插件：
+
+- **四道钩子防线**：`tools/pre-execute` 扫工具参数（高危拒绝、危险工具走人工审批）、`tools/post-execute` 扫工具结果（间接注入藏身处，block/quarantine）、`agent/pre-step` 扫进入模型前的消息（`[CRON TASK]` / `[SCHEDULE REMINDER]` / 网页检索 / 文件内容夹带的恶意指令在进入模型前被隔离）+ 每会话一次金丝雀守卫、`llm/stream` 出站消毒与金丝雀命中检测（block 模式中断输出）。
+- **三模式**：`quarantine`（默认，可原地改写的路径替换命中片段）/ `block`（更严格 + 金丝雀中断）/ `monitor`（只审计）。
+- **工具与审计**：`_antivirus_scan` / `_antivirus_status` 随会话可用；审计写 `~/.dsh/task-board/prompt-antivirus-audit.jsonl`（环形 500 条 + 文件上限 2MB，失败静默）。
+- **接入**：`plugins/dsh-prompt-antivirus/` 随仓库分发；`scripts/dsh-prompt-antivirus-install.mjs` 一键装到 web + headless profile（源码 → plugins-src + 软链 + 清单注册，幂等）；`dsh-hm-update.mjs` 自动部署 `plugins/` 下全部 profile 级插件。
+- **验证**：32 项单测 + harness 全绿（签名库全类别/严重级、中文无害文本不误报、三模式决策、pre-step 金丝雀单次注入、stream 金丝雀中断/移除）。
 
 ### 2026-08-31 — 跟进官方 0.1.2-alpha.2（3 处鸿蒙补丁）
 

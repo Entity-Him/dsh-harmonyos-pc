@@ -1,0 +1,5 @@
+# dsh-prompt-antivirus bundle patch — one host loader entry over every profile.
+# 挂载在 profile 层（web/headless），对所有预设与子代理全局生效。
+- insert:
+    - id: prompt-antivirus
+      name: dsh-prompt-antivirus
