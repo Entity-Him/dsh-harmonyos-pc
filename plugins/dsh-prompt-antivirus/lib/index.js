@@ -104,7 +104,10 @@ export function apply(ctx) {
     canaries,
     scanToolParams,
     scanToolResult,
-    createGuardMessage: (text) => createUserMessage({ content: [{ type: "text", text }] }),
+    createGuardMessage: (text) => createUserMessage({
+      content: [{ type: "text", text }],
+      source: { kind: "plugin", plugin: "prompt-antivirus", form: "guard" },
+    }),
   });
 
   console.log(`[prompt-antivirus] 已加载, mode=${cfg.mode}, canary=${cfg.canaryEnabled}, audit=${cfg.auditLog}, rules=${getRuleCount()}, rulesPath=${rulesPath()}`);
