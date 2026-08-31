@@ -30,7 +30,7 @@
 
 > **群介绍**：让 DeepSeek Harness（dsh）在 HarmonyOS / 鸿蒙 设备上完整跑起来的全套适配方案。鸿蒙端几乎没人做这件事——原生 ELF/.node 模块、node-pty、Koffi 在这类设备上都加载不了。本仓库把「安装、打补丁、缓存优化、插件安装、自更新」一整套工程沉淀成可复刻的开源方案：
 >
-> - **七套「鸿蒙对话模式」Agent 预设**：把 DeepSeek 前缀缓存命中率拉到最高，同时保留任务交付能力——`harmony-chat`（极简）/ `harmony-chat-pro`（缓存极致）/ `harmony-chat-promax`（六边形交付最强）/ `harmony-chat-ops`（常驻后台任务管家）/ `harmony-chat-rampagemax`（狂暴质量）/ `harmony-kb`（知识库专家）/ `harmony-deveco`（DevEco 全链路开发大师）
+> - **八套「鸿蒙对话模式」Agent 预设**：把 DeepSeek 前缀缓存命中率拉到最高，同时保留任务交付能力——`harmony-chat`（极简）/ `harmony-chat-pro`（缓存极致）/ `harmony-chat-promax`（六边形交付最强）/ `harmony-chat-ops`（常驻后台任务管家）/ `harmony-chat-rampagemax`（狂暴质量）/ `harmony-kb`（知识库专家）/ `harmony-deveco`（DevEco 全链路开发大师）/ `harmony-chat-monash`（Monash 学生版）
 > - **六边形 ProMax**（2026-08-18 升级）：缓存命中 / 省 token / 交付能力 / 测试验证 / 集成闭环 / 共存防御六条硬规则同场，把「写完代码」与「系统跑起来」之间的鸿沟写成机械清单，交付纪律对标并反超主流通用 Agent
 > - **狂暴 Max**（2026-08-18 新增）：不省 token 只讲质量与交付的极限模式——运行上下文 + 网页抓取全开，预检穷尽扫描，集成闭环与双重验证写死为铁律。慎用：高 token 消耗，可能清空账户额度
 > - **启动补丁** `harmony.patch.yml`（web）+ `harmony-headless.patch.yml`（headless）：禁用依赖原生二进制的插件行，让 dsh 不再启动即崩
@@ -40,7 +40,7 @@
 > - **工具链**：GitHub 插件一键安装器、dsh 自更新器 + 设置页
 > - **全局防注入 `dsh-prompt-antivirus`**（2026-08-31 新增）：扫描工具参数 / 工具结果 / 进入模型前的消息，隔离或拦截提示注入与「上下文病毒」，每会话注入金丝雀守卫，危险工具走人工审批——profile 层挂载，对全部预设与子代理全局生效
 
-- **七套「鸿蒙对话模式」Agent 预设**：把 DeepSeek 前缀缓存命中率拉到最高，同时保留任务交付能力——`harmony-chat`（极简）/ `harmony-chat-pro`（缓存极致）/ `harmony-chat-promax`（六边形交付最强）/ `harmony-chat-ops`（常驻后台任务管家）/ `harmony-chat-rampagemax`（狂暴质量）/ `harmony-kb`（知识库专家）/ `harmony-deveco`（DevEco 全链路开发大师）
+- **八套「鸿蒙对话模式」Agent 预设**：把 DeepSeek 前缀缓存命中率拉到最高，同时保留任务交付能力——`harmony-chat`（极简）/ `harmony-chat-pro`（缓存极致）/ `harmony-chat-promax`（六边形交付最强）/ `harmony-chat-ops`（常驻后台任务管家）/ `harmony-chat-rampagemax`（狂暴质量）/ `harmony-kb`（知识库专家）/ `harmony-deveco`（DevEco 全链路开发大师）/ `harmony-chat-monash`（Monash 学生版）
 - **六边形 ProMax**（2026-08-18 升级）：缓存命中 / 省 token / 交付能力 / 测试验证 / 集成闭环 / 共存防御六条硬规则同场，把「写完代码」与「系统跑起来」之间的鸿沟写成机械清单，交付纪律对标并反超主流通用 Agent
 - **狂暴 Max**（2026-08-18 新增）：不省 token 只讲质量与交付的极限模式——运行上下文 + 网页抓取全开，预检穷尽扫描，集成闭环与双重验证写死为铁律。慎用：高 token 消耗，可能清空账户额度
 - **知识库专家 `harmony-kb`**（2026-08-19 新增）：把工作区当知识库——分层检索问答 / 深度研究（Pro 委派提炼）/ 文档整理 / 思维脑图（可导入万兴脑图）/ 笔记生成，并按指令把总结推送进鸿蒙侧载版 Obsidian（`[[双链]]` 只挂已有笔记）。注意：频繁委派 Pro + 多工具调用，CPU 负载高，风扇转得较狠
@@ -94,7 +94,7 @@ cd ~/dsh-test && npm install @deepseek-ai/dsh
 
 ### 2. 部署预设（对话模式）
 
-把七套模式目录拷进 dsh 的用户预设目录：
+把预设目录拷进 dsh 的用户预设目录：
 
 ```bash
 mkdir -p ~/.dsh/.agent-presets
@@ -108,7 +108,7 @@ agent-presets:
   default: harmony-chat-promax
 ```
 
-七套模式在 dsh 设置面板「对话模式」下拉里可随时自由切换（切换只影响新建会话）。详见 [docs/CACHE-OPTIMIZATION.md](docs/CACHE-OPTIMIZATION.md) 了解它们为什么快。
+八套模式在 dsh 设置面板「对话模式」下拉里可随时自由切换（切换只影响新建会话）。详见 [docs/CACHE-OPTIMIZATION.md](docs/CACHE-OPTIMIZATION.md) 了解它们为什么快。
 
 | 模式 | persona | 缓存策略 | 工具集 |
 |---|---|---|---|
@@ -120,6 +120,7 @@ agent-presets:
 | `harmony-chat-rampagemax`（狂暴Max，慎用） | 不省 token 只讲质量与交付 | **打开**运行上下文，前缀动态、命中率低 | 全部 promax 能力 + 网页 fetch 全开 + 双重验证/交叉互证 + 委派全量 Pro + 预检穷尽扫描 |
 | `harmony-kb`（知识库专家） | 工作区即知识库：分层检索 / 深度研究 / 文档整理 / 脑图 / 笔记 | 关闭运行上下文，前缀稳定 | + 目录枚举（list_dir）+ Obsidian 双链笔记推送 |
 | `harmony-deveco`（开发大师） | 鸿蒙 DevEco 全链路开发（写 ArkTS → 编译 → 装真机 → 启动） | 关闭运行上下文，前缀稳定 | + dev_environment/build/install_deps/list_devices/deploy + dev_code（委托本机 DevEco Code 代理）+ 麒麟 X90 功耗纪律 |
+| `harmony-chat-monash`（Monash 学生版） | Monash 全校区学生助手：文献解读 / 论文查重 / 作业辅助 + 学生服务与墨尔本交通知识库 | 关闭运行上下文，长稳定前缀（同 ProMax） | 同 promax 全工具集（fs / 检索 / 委派 / 工作流） |
 
 ### 2.4 六边形 ProMax：鸿蒙上交付能力的天花板
 

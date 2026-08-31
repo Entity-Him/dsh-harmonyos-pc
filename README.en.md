@@ -30,7 +30,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 
 > **About this project**: A complete adaptation suite to get DeepSeek Harness (dsh) fully running on HarmonyOS devices. Almost nobody has done this on HarmonyOS—native ELF/.node modules, node-pty, and Koffi cannot load on such devices. This repository distills the whole engineering effort—installation, patching, cache optimization, plugin installation, and self-update—into a reproducible open-source solution:
 >
-> - **Seven HarmonyOS "conversation mode" Agent presets**: push DeepSeek's prefix cache hit rate to the maximum while retaining task delivery capability—`harmony-chat` (minimal) / `harmony-chat-pro` (cache-optimized) / `harmony-chat-promax` (strongest Hexagon delivery) / `harmony-chat-ops` (resident background task steward) / `harmony-chat-rampagemax` (Rampage Max quality) / `harmony-kb` (knowledge-base expert) / `harmony-deveco` (DevEco full-stack development master)
+> - **Eight HarmonyOS "conversation mode" Agent presets**: push DeepSeek's prefix cache hit rate to the maximum while retaining task delivery capability—`harmony-chat` (minimal) / `harmony-chat-pro` (cache-optimized) / `harmony-chat-promax` (strongest Hexagon delivery) / `harmony-chat-ops` (resident background task steward) / `harmony-chat-rampagemax` (Rampage Max quality) / `harmony-kb` (knowledge-base expert) / `harmony-deveco` (DevEco full-stack development master) / `harmony-chat-monash` (Monash student edition)
 > - **Hexagon ProMax** (upgraded 2026-08-18): six hard rules in one place—cache hit, token savings, delivery capability, test verification, integration loop, coexistence defense—turning the gap between "code written" and "system running" into a mechanical checklist, with delivery discipline benchmarked against and exceeding mainstream general-purpose Agents
 > - **Rampage Max** (added 2026-08-18): an extreme mode that spends token without restraint, prioritizing quality and delivery—runtime context and web fetching fully enabled, exhaustive pre-check scanning, integration loop and double verification written as iron rules. Use with caution: high token consumption, may drain your account quota
 > - **Launch patches** `harmony.patch.yml` (web) + `harmony-headless.patch.yml` (headless): disable plugin lines that depend on native binaries, so dsh no longer crashes on startup
@@ -40,7 +40,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 > - **Toolchain**: one-click GitHub plugin installer, dsh self-updater + settings page
 > - **Global prompt-antivirus `dsh-prompt-antivirus`** (added 2026-08-31): scans tool arguments / tool results / messages before they enter the model, quarantining or blocking prompt injection and "context-virus" payloads; injects a per-session canary guard and routes high-risk dangerous tools through human approval—mounted at the profile layer, active globally across all presets and subagents
 
-- **Seven HarmonyOS "conversation mode" Agent presets**: push DeepSeek's prefix cache hit rate to the maximum while retaining task delivery capability—`harmony-chat` (minimal) / `harmony-chat-pro` (cache-optimized) / `harmony-chat-promax` (strongest Hexagon delivery) / `harmony-chat-ops` (resident background task steward) / `harmony-chat-rampagemax` (Rampage Max quality) / `harmony-kb` (knowledge-base expert) / `harmony-deveco` (DevEco full-stack development master)
+- **Eight HarmonyOS "conversation mode" Agent presets**: push DeepSeek's prefix cache hit rate to the maximum while retaining task delivery capability—`harmony-chat` (minimal) / `harmony-chat-pro` (cache-optimized) / `harmony-chat-promax` (strongest Hexagon delivery) / `harmony-chat-ops` (resident background task steward) / `harmony-chat-rampagemax` (Rampage Max quality) / `harmony-kb` (knowledge-base expert) / `harmony-deveco` (DevEco full-stack development master) / `harmony-chat-monash` (Monash student edition)
 - **Hexagon ProMax** (upgraded 2026-08-18): six hard rules in one place—cache hit, token savings, delivery capability, test verification, integration loop, coexistence defense—turning the gap between "code written" and "system running" into a mechanical checklist, with delivery discipline benchmarked against and exceeding mainstream general-purpose Agents
 - **Rampage Max** (added 2026-08-18): an extreme mode that spends token without restraint, prioritizing quality and delivery—runtime context and web fetching fully enabled, exhaustive pre-check scanning, integration loop and double verification written as iron rules. Use with caution: high token consumption, may drain your account quota
 - **HarmonyOS Dev Master `harmony-deveco`** (added 2026-08-20): a DevEco full-stack development agent—drives hvigor/ohpm/hdc through the dev_* tools to close the "write ArkTS → build → deploy to device → launch" loop (including signing/packaging guidance); `dev_code` delegates deep sub-tasks to the local DevEco Code agent (OpenCode web, 127.0.0.1:4096). Kirin X90 software-hardware-coordinated power discipline: serialized delegation, never saturating the 4 cores
@@ -92,7 +92,7 @@ cd ~/dsh-test && npm install @deepseek-ai/dsh
 
 ### 2. Deploy the presets (conversation modes)
 
-Copy the seven mode directories into dsh's user preset directory:
+Copy the preset directories into dsh's user preset directory:
 
 ```bash
 mkdir -p ~/.dsh/.agent-presets
@@ -106,7 +106,7 @@ agent-presets:
   default: harmony-chat-promax
 ```
 
-All seven modes can be freely switched at any time in the "conversation mode" dropdown of dsh's settings panel (switching only affects new sessions). See [docs/CACHE-OPTIMIZATION.en.md](docs/CACHE-OPTIMIZATION.en.md) for why they are fast.
+All eight modes can be freely switched at any time in the "conversation mode" dropdown of dsh's settings panel (switching only affects new sessions). See [docs/CACHE-OPTIMIZATION.en.md](docs/CACHE-OPTIMIZATION.en.md) for why they are fast.
 
 | Mode | persona | Cache strategy | Tool set |
 |---|---|---|---|
@@ -118,6 +118,7 @@ All seven modes can be freely switched at any time in the "conversation mode" dr
 | `harmony-chat-rampagemax` (Rampage Max, use with caution) | No token savings, quality and delivery first | **Runtime context enabled**, dynamic prefix, low hit rate | All promax capabilities + web fetch fully enabled + double verification/cross-checking + full-Pro delegation + exhaustive pre-check scan |
 | `harmony-kb` (knowledge-base expert) | Workspace-as-knowledge-base: layered retrieval / deep research / doc organization / mind maps / notes | Runtime context disabled, stable prefix | + directory enumeration (list_dir) + Obsidian wikilink note push |
 | `harmony-deveco` (Dev Master) | HarmonyOS DevEco full-stack development (write ArkTS → build → deploy → launch) | Runtime context disabled, stable prefix | + dev_environment/build/install_deps/list_devices/deploy + dev_code (delegate to local DevEco Code agent) + Kirin X90 power discipline |
+| `harmony-chat-monash` (Monash student edition) | Monash all-campus study assistant: literature interpretation / plagiarism check / assignment help + student services & Melbourne transport KB | Runtime context disabled, long stable prefix (same as ProMax) | Same full tool set as promax (fs / web search / delegation / workflows) |
 
 ### 2.4 Hexagon ProMax: the ceiling of delivery capability on HarmonyOS
 
