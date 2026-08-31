@@ -27,6 +27,9 @@ const CORDIS_LOADER_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'cordis
 // SettingsProvider.installSection。社区插件(dsh-harmonyos-market/dshmarket/dsh-visual-plugin/
 // dsh-knowledge-base/dsh-workstation/dsh-hiboard-push)仍按旧 API 导入，需加兼容垫片。
 const SETTINGS_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-settings', 'lib', 'index.js');
+// dsh web 认证：0.1.2-alpha.2 每次进程启动都换新 launch token，本机新标签页/收藏夹的裸地址
+// http://127.0.0.1:3080 永远 401「authentication required」。回环地址改为免 token 自动签发 cookie。
+const CONN_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-client-connection', 'lib', 'index.js');
 // dsh-visual-plugin（第三方，github.com/jyh20030112/dsh-visual-plugin）以源码形式落在 profile 树，
 // 经 dsh-hm-install.mjs 铺进 plugins-src 并软链到 node_modules；运行时入口是 lib/index.js。
 const VISUAL_FILE = join(HOME, '.dsh', 'profiles', 'web', 'plugins-src', 'dsh-visual-plugin', 'lib', 'index.js');
@@ -341,13 +344,91 @@ function patchSettingsCompat() {
   writeFileSync(SETTINGS_FILE, txt.split(anchor).join(block + replacement));
   return { changed: true };
 }
+// dsh web 回环免 token：单用户本机 cookie 无效时对 GET / 自动签发 30 天会话 cookie
+// （与 token 交换同一持久签名密钥、绑定 authority），有效 cookie 直接放行，无 303 循环；
+// 旧进程残留的过期 token URL 也走回环兜底换新 cookie，不再死锁 401；非回环仍走原 token 流程。
+function patchLoopbackAuth() {
+  const txt = readFileSafe(CONN_FILE);
+  if (!txt) throw new Error('dsh-client-connection 文件不存在，需手动处理: ' + CONN_FILE);
+  if (txt.includes(MARK)) return { changed: false };
+  const helperAnchor = 'function tokenMatches(actual, expected) {\n\tconst actualBytes = Buffer.from(actual, "utf8");\n\tconst expectedBytes = Buffer.from(expected, "utf8");\n\treturn actualBytes.byteLength === expectedBytes.byteLength && timingSafeEqual(actualBytes, expectedBytes);\n}';
+  const inlineMint = '\t\t\t\tconst issuedAt = Date.now();\n\t\t\t\tconst expiresAt = issuedAt + this.maxAgeMilliseconds;\n\t\t\t\tconst value = encodeCookie({\n\t\t\t\t\tversion: COOKIE_PAYLOAD_VERSION,\n\t\t\t\t\tauthority,\n\t\t\t\t\tissuedAt,\n\t\t\t\t\texpiresAt\n\t\t\t\t}, this.secret);\n\t\t\t\tres.writeHead(303, {\n\t\t\t\t\t"cache-control": "no-store",\n\t\t\t\t\t"location": "/",\n\t\t\t\t\t"referrer-policy": "no-referrer",\n\t\t\t\t\t"set-cookie": sessionCookie(cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1e3))\n\t\t\t\t});\n\t\t\t\tres.end();\n\t\t\t\treturn false;\n\t\t\t}';
+  const tokensTailAnchor = '\t\t\tthis.writeUnauthorized(req, res);\n\t\t\treturn false;\n\t\t}\n\t\tif (this.isAuthenticated(req)) return true;';
+  const noTokenTailAnchor = '\t\tif (this.isAuthenticated(req)) return true;\n\t\tthis.writeUnauthorized(req, res);\n\t\treturn false;\n\t}';
+  for (const [name, anchor] of [['helper', helperAnchor], ['inlineMint', inlineMint], ['tokensTail', tokensTailAnchor], ['noTokenTail', noTokenTailAnchor]]) {
+    if (!txt.includes(anchor)) throw new Error('client-connection 补丁锚点缺失(' + name + ')，需手动处理: ' + CONN_FILE);
+  }
+  const helper =
+    '\n/** Loopback authorities are trusted on this single-user machine (HarmonyOS patch). */\n' +
+    'function isLoopbackAuthority(authority) {\n' +
+    '\tif (typeof authority !== "string") return false;\n' +
+    '\tlet host = authority;\n' +
+    '\tif (host.startsWith("[")) {\n' +
+    '\t\tconst end = host.indexOf("]");\n' +
+    '\t\tif (end === -1) return false;\n' +
+    '\t\thost = host.slice(1, end);\n' +
+    '\t} else {\n' +
+    '\t\thost = host.split(":")[0];\n' +
+    '\t}\n' +
+    '\treturn host === "localhost" || host === "::1" || host === "0:0:0:0:0:0:0:1" || host.startsWith("127.");\n' +
+    '}';
+  const mintCall = '\t\t\t\tthis.mintCookie(req, res, authority);\n\t\t\t\treturn false;\n\t\t\t}';
+  const staleFallback =
+    '\t\t\t/* HarmonyOS patch: 回环地址兜底——旧进程的过期 token(浏览器里残留的旧 URL)\n' +
+    '\t\t\t * 直接换新 cookie，避免「authentication required」死锁；非回环仍 401。 */\n' +
+    '\t\t\tif (this.loopbackSession(req)) {\n' +
+    '\t\t\t\tthis.mintCookie(req, res, requestAuthority(req.headers));\n' +
+    '\t\t\t\treturn false;\n' +
+    '\t\t\t}\n';
+  const noTokenFallback =
+    '\t\t/* HarmonyOS patch: 单用户本机(127.0.0.1/localhost)直接访问 / 无需 token，自动签发\n' +
+    '\t\t * 30 天 cookie(与 token 交换同一签名密钥/绑定 authority)，随后刷新即可持续登录。\n' +
+    '\t\t * 仅在 cookie 无效时兜底，避免有效会话被 303 循环；非回环地址仍走原 token 流程。 */\n' +
+    '\t\tif (this.loopbackSession(req)) {\n' +
+    '\t\t\tthis.mintCookie(req, res, requestAuthority(req.headers));\n' +
+    '\t\t\treturn false;\n' +
+    '\t\t}\n';
+  const methods =
+    '\t/** Mint the authority-bound 30-day session cookie and redirect to clean `/` (HarmonyOS patch). */\n' +
+    '\tmintCookie(req, res, authority) {\n' +
+    '\t\tconst issuedAt = Date.now();\n' +
+    '\t\tconst expiresAt = issuedAt + this.maxAgeMilliseconds;\n' +
+    '\t\tconst value = encodeCookie({\n' +
+    '\t\t\tversion: COOKIE_PAYLOAD_VERSION,\n' +
+    '\t\t\tauthority,\n' +
+    '\t\t\tissuedAt,\n' +
+    '\t\t\texpiresAt\n' +
+    '\t\t}, this.secret);\n' +
+    '\t\tres.writeHead(303, {\n' +
+    '\t\t\t"cache-control": "no-store",\n' +
+    '\t\t\t"location": "/",\n' +
+    '\t\t\t"referrer-policy": "no-referrer",\n' +
+    '\t\t\t"set-cookie": sessionCookie(cookieName(authority), value, expiresAt, Math.floor(this.maxAgeMilliseconds / 1e3))\n' +
+    '\t\t});\n' +
+    '\t\tres.end();\n' +
+    '\t}\n' +
+    '\t/** True for a GET index request from a trusted loopback authority (HarmonyOS patch). */\n' +
+    '\tloopbackSession(req) {\n' +
+    '\t\tconst authority = requestAuthority(req.headers);\n' +
+    '\t\tif (req.method !== "GET" || authority === void 0 || !isLoopbackAuthority(authority)) return false;\n' +
+    '\t\tconst url = new URL(req.url ?? "/", "http://dsh.invalid");\n' +
+    '\t\treturn url.pathname === "/";\n' +
+    '\t}';
+  let patched = txt
+    .split(helperAnchor).join(helperAnchor + helper)
+    .split(inlineMint).join(mintCall)
+    .split(tokensTailAnchor).join(staleFallback + tokensTailAnchor)
+    .split(noTokenTailAnchor).join('\t\tif (this.isAuthenticated(req)) return true;\n' + noTokenFallback + '\t\tthis.writeUnauthorized(req, res);\n\t\treturn false;\n\t}\n' + methods);
+  writeFileSync(CONN_FILE, patched);
+  return { changed: true };
+}
 function patchAll() {
   const r1 = patchCredentials(), r2 = patchSession(), r3 = patchPermission(), r4 = patchAttachment(), r5 = patchVision();
-  const r6 = patchCordisLoader(), r7 = patchSettingsCompat();
-  for (const f of [CRED_FILE, SESS_FILE, PERM_FILE, ATTACH_FILE, VISUAL_FILE, CORDIS_LOADER_FILE, SETTINGS_FILE]) {
+  const r6 = patchCordisLoader(), r7 = patchSettingsCompat(), r8 = patchLoopbackAuth();
+  for (const f of [CRED_FILE, SESS_FILE, PERM_FILE, ATTACH_FILE, VISUAL_FILE, CORDIS_LOADER_FILE, SETTINGS_FILE, CONN_FILE]) {
     if (!readFileSafe(f).includes(MARK)) throw new Error('补丁校验失败(标记缺失): ' + f);
   }
-  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed };
+  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed, loopbackAuth: r8.changed };
 }
 
 // compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包：npm install 重装核心包时，
@@ -409,7 +490,7 @@ export async function install() {
   log('安装完成 → ' + target);
   writeFileSync(PREV, before);
   const p = patchAll();
-  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在') + ', cordisLoader=' + (p.cordisLoader ? '重打' : '已存在') + ', settingsCompat=' + (p.settingsCompat ? '重打' : '已存在'));
+  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在') + ', cordisLoader=' + (p.cordisLoader ? '重打' : '已存在') + ', settingsCompat=' + (p.settingsCompat ? '重打' : '已存在') + ', loopbackAuth=' + (p.loopbackAuth ? '重打' : '已存在'));
   const killed = stopDsh();
   if (killed > 0) log('已停旧 dsh 进程 ' + killed + ' 个');
   restartDsh();
