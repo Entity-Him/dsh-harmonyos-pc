@@ -359,6 +359,15 @@ This project does not include dsh source code; it only contains independently wr
 
 ## Changelog
 
+### 2026-08-31 — New preset harmony-chat-monash (Monash student edition)
+
+Eighth "HarmonyOS conversation mode" preset (order 8), built on the `harmony-chat-promax` skeleton (`includeRuntimeContext: false` — fully static system prompt, high DeepSeek prefix-cache hit rate; identical tool set to ProMax: fs / web search / delegation / planning / workflows, pure JS with no native dependencies), with the persona specialized for Monash University students:
+
+- **Literature interpretation**: one-sentence summary + research question → background → methods → results → discussion → limitations → relevance to the assignment; explains key terms and statistical methods (t-tests, regression, effect sizes) and provides ready-to-use citations (APA 7th by default, AGLC4 for legal sources)
+- **Plagiarism check & academic integrity**: does not replace Turnitin — guides uploading drafts to Moodle for the Similarity Report, distinguishes legitimate citations from text needing rewriting with concrete rewriting strategies; red lines: contract cheating, buying essays, undeclared AI use, and self-plagiarism all violate the Student Academic Integrity Procedure
+- **Assignment help**: breaks down task verbs + rubric → argument structure → key points → section-by-section draft review; never writes whole essays or fabricates references
+- **Built-in knowledge base**: student services & libraries across Clayton / Caulfield / Docklands (Monash College), university-wide services (Student Academic Success / English Connect / counselling 03 9905 3020 / Safer Community / eSolutions / Career Connect; moodle.monash.edu · my.monash.edu · WES); Melbourne transport (free Intercampus Shuttle, Huntingdale / Caulfield / Southern Cross travel guides, myki concession / ISTP / Monash Commuter Club discounts; timetables per PTV Journey Planner)
+
 ### 2026-08-31 — Global prompt-antivirus dsh-prompt-antivirus (context-virus defense)
 
 Ported the principle of `openclaw-prompt-antivirus` (runtime defense against prompt injection / mind-virus attacks) onto dsh as a profile-layer global plugin:

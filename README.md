@@ -443,6 +443,15 @@ MIT License，见 [LICENSE](LICENSE)。
 
 ## 更新记录
 
+### 2026-08-31 — 新增 harmony-chat-monash 鸿蒙对话 Monash 学生版预设
+
+第八套「鸿蒙对话模式」预设（order 8），以 `harmony-chat-promax` 为骨架（`includeRuntimeContext:false` 关闭动态运行上下文，系统提示段全静态、DeepSeek 前缀缓存命中率高；工具集与 ProMax 完全相同：fs / 网页检索 / 委派 / 计划 / 工作流，纯 JS 无原生依赖），persona 领域化为 Monash University 学生学习场景：
+
+- **文献解读**：一句话总结与研究问题 → 背景 → 方法 → 结果 → 讨论 → 局限 → 与作业的关联；解释关键术语与统计方法（t 检验、回归、效应量等），可直接引用并给引用格式（默认 APA 7th，法律类 AGLC4）
+- **论文查重与学术诚信**：不替代 Turnitin——引导经 Moodle 上传草稿看 Similarity Report，区分合理引用与需要改写的重复文本并给改写策略；红线：代写、购买论文、未声明使用 AI、自我抄袭均违反 Student Academic Integrity Procedure
+- **作业辅助**：任务动词拆题 + rubric 对照 → 搭论证结构 → 列要点 → 审草稿逐段给改进意见；不代写整篇、不编造参考文献
+- **内置知识库**：Clayton / Caulfield / Docklands（Monash College）三校区学生服务与图书馆、全校服务（Student Academic Success / English Connect / 咨询 03 9905 3020 / Safer Community / eSolutions / Career Connect，入口 moodle.monash.edu · my.monash.edu · WES）；墨尔本交通（免费 Intercampus Shuttle、Huntingdale / Caulfield / Southern Cross 乘车指引、myki concession / ISTP / Monash Commuter Club 折扣，班次以 PTV Journey Planner 为准）
+
 ### 2026-08-31 — 全局防注入 dsh-prompt-antivirus（防「上下文病毒」）
 
 把 `openclaw-prompt-antivirus`（提示注入 / mind-virus 运行时防御）的原理移植到 dsh，做成 profile 层全局插件：
