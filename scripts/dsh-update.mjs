@@ -18,6 +18,10 @@ const CRED_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-credentials
 const SESS_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-session-persistence-jsonl', 'lib', 'index.js');
 const PERM_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-permission-presets', 'lib', 'index.js');
 const ATTACH_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-attachment-local', 'lib', 'index.js');
+// 工作区新文件写入(create-if-absent)走硬链接发布，鸿蒙 /storage 挂载对 link() 报 EPERM，
+// 即使目标不存在也失败；补丁在确认目标缺失后改按 rename 发布，保住 create-if-absent 语义。
+// 官方 alpha.2/alpha.3 均未含此兜底，升级重装会被冲掉，故必须纳入 patchAll 幂等重打。
+const FS_LOCAL_FILE = join(DSH_DIR, 'node_modules', '@deepseek-ai', 'dsh-fs-local', 'lib', 'index.js');
 // 0.1.2-alpha.2 起官方把裸插件名解析交给 node 内部 ESM loader(internal.import(name, baseUrl))；
 // 鸿蒙自带 node v22.7.0 的内部 loader 既无 getOrCreateModuleJob 也无 getModuleJobForImport，
 // ModuleLoader.fromInternal() 因此判定 shape 未知并返回 undefined → 裸插件名从 dsh-test 解析，
@@ -224,6 +228,34 @@ function patchAttachment() {
   writeFileSync(ATTACH_FILE, patched);
   return { changed: true };
 }
+// 工作区新文件写入：dsh-fs-local 在 createIfAbsent 分支先 link() 再 fallback，本机(Android/HarmonyOS
+// 存储)对 link() 报 EPERM 且目标不存在也报错，导致新文件写入直接炸。先查目标是否已存在：
+// 存在则该抛 create 冲突(原 throwGuardedCreateFailure 语义)，不存在则改按 rename 发布。
+function patchFsLocal() {
+  const txt = readFileSafe(FS_LOCAL_FILE);
+  if (!txt) throw new Error('fs-local 文件不存在，需手动处理: ' + FS_LOCAL_FILE);
+  // 幂等：本补丁专用的可读注释作为标记（用大写的 HarmonyOS 前缀与其它补丁区分）。
+  if (txt.includes('HarmonyOS /storage mounts reject hard links')) return { changed: false };
+  const re = /([ \t]+)await throwGuardedCreateFailure\(error, absolutePath, createIfAbsent\.displayPath, inspectPublicationTarget\);/;
+  const m = re.exec(txt);
+  if (!m) throw new Error('fs-local 补丁锚点缺失(throwGuardedCreateFailure createIfAbsent)，需手动处理: ' + FS_LOCAL_FILE);
+  const ind = m[1];
+  const block = ind + 'let existing;\n' +
+    ind + 'try {\n' +
+    ind + '\texisting = await inspectPublicationTarget(absolutePath);\n' +
+    ind + '} catch (metadataError) {\n' +
+    ind + '\tif (!isENOENT(metadataError) && !isENOTDIR(metadataError)) throw new FsError(`cannot write "${createIfAbsent.displayPath}": ${errorMessage(metadataError)}`, "FS_IO_ERROR", { cause: metadataError });\n' +
+    ind + '}\n' +
+    ind + 'if (existing !== void 0) {\n' +
+    ind + '\tawait throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget);\n' +
+    ind + '}\n' +
+    ind + '// HarmonyOS /storage mounts reject hard links with EPERM even for\n' +
+    ind + '// absent targets; publish via rename instead (target absence was\n' +
+    ind + '// just verified, so create-if-absent semantics are preserved).\n' +
+    ind + 'await rename(tempPath, absolutePath);';
+  writeFileSync(FS_LOCAL_FILE, txt.replace(re, block));
+  return { changed: true };
+}
 function patchVision() {
   const txt = readFileSafe(VISUAL_FILE);
   if (!txt) throw new Error('dsh-visual-plugin 入口不存在，需手动处理: ' + VISUAL_FILE);
@@ -424,11 +456,14 @@ function patchLoopbackAuth() {
 }
 function patchAll() {
   const r1 = patchCredentials(), r2 = patchSession(), r3 = patchPermission(), r4 = patchAttachment(), r5 = patchVision();
-  const r6 = patchCordisLoader(), r7 = patchSettingsCompat(), r8 = patchLoopbackAuth();
+  const r6 = patchCordisLoader(), r7 = patchSettingsCompat(), r8 = patchLoopbackAuth(), r9 = patchFsLocal();
   for (const f of [CRED_FILE, SESS_FILE, PERM_FILE, ATTACH_FILE, VISUAL_FILE, CORDIS_LOADER_FILE, SETTINGS_FILE, CONN_FILE]) {
     if (!readFileSafe(f).includes(MARK)) throw new Error('补丁校验失败(标记缺失): ' + f);
   }
-  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed, loopbackAuth: r8.changed };
+  if (!readFileSafe(FS_LOCAL_FILE).includes('HarmonyOS /storage mounts reject hard links')) {
+    throw new Error('补丁校验失败(标记缺失): ' + FS_LOCAL_FILE);
+  }
+  return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed, loopbackAuth: r8.changed, fsLocal: r9.changed };
 }
 
 // compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包：npm install 重装核心包时，
@@ -468,9 +503,12 @@ export async function isUp() {
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 1500);
-    const res = await fetch('http://127.0.0.1:3080/', { signal: ctl.signal });
+    // token 认证下根路径无有效 cookie 会 303 跳转（回环补丁下带 cookie 最终 200）。
+    // fetch 默认跟随跳转但不会跨跳保留 cookie，最终仍是 3xx；服务在监听即视为 up，
+    // 后续「当前 token 能否换到 200」由 dsh-web.sh 的 is_up(curl 任意响应)兜底。
+    const res = await fetch('http://127.0.0.1:3080/', { signal: ctl.signal, redirect: 'manual' });
     clearTimeout(t);
-    return res.ok;
+    return res.status >= 200 && res.status < 400;
   } catch { return false; }
 }
 
@@ -490,7 +528,7 @@ export async function install() {
   log('安装完成 → ' + target);
   writeFileSync(PREV, before);
   const p = patchAll();
-  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在') + ', cordisLoader=' + (p.cordisLoader ? '重打' : '已存在') + ', settingsCompat=' + (p.settingsCompat ? '重打' : '已存在') + ', loopbackAuth=' + (p.loopbackAuth ? '重打' : '已存在'));
+  log('补丁: credential=' + (p.credential ? '重打' : '已存在') + ', session=' + (p.session ? '重打' : '已存在') + ', permission=' + (p.permission ? '重打' : '已存在') + ', attachment=' + (p.attachment ? '重打' : '已存在') + ', vision=' + (p.vision ? '重打' : '已存在') + ', cordisLoader=' + (p.cordisLoader ? '重打' : '已存在') + ', settingsCompat=' + (p.settingsCompat ? '重打' : '已存在') + ', loopbackAuth=' + (p.loopbackAuth ? '重打' : '已存在') + ', fsLocal=' + (p.fsLocal ? '重打' : '已存在'));
   const killed = stopDsh();
   if (killed > 0) log('已停旧 dsh 进程 ' + killed + ' 个');
   restartDsh();

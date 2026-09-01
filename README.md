@@ -63,6 +63,7 @@
 | 文件系统不支持硬链接 | session 持久化 `link()` 发布日志报 `EPERM` | 补丁 `dsh-session-persistence-jsonl`：`link` 改 `rename` |
 | 鸿蒙无 bash shell（沙箱原生依赖被禁） | 对话框没有权限预设下拉（read-only/workspace-write/danger-full-access） | 补丁 `dsh-permission-presets`：`sandboxMode` 改读 fs 沙箱（纯 JS，一直在运行） |
 | 鸿蒙存储拒绝硬链接 / 部分挂载点打不开只读句柄 | 读图（read_image / 附件）`link()` 报 `EPERM`、目录 `fsync` 报错，图片存不下来 → 模型看不到图 | 补丁 `dsh-attachment-local`：`link` 失败改 `copy` 发布（EEXIST 竞态走完整性校验）；`syncDirectory` 对 EPERM/EACCES/ENOTSUP 挂载点跳过 fsync |
+| 鸿蒙存储拒绝硬链接 | 工作区新文件写入（`createIfAbsent`）`link()` 报 `EPERM`，新文件写不进去 | 补丁 `dsh-fs-local`：先确认目标不存在，再改按 `rename` 发布，保住 create-if-absent 语义 |
 | `dsh-visual-plugin`（第三方）面板默认未配置视觉端点 | `vision model is not configured`，或自定义 prompt 时视觉模型返回空文本被硬抛 | 补丁 `dsh-visual-plugin`：端点为空时回退到主 DeepSeek 视觉模型（`llm-deepseek` + `DEEPSEEK_API_KEY`）；空 content 重试一次并降级为明确提示 |
 | `git ls-remote` 被 isogit 垫片拦截 | GitHub 源插件装不了 | `scripts/dsh-hm-install.mjs` 安装器（fetch 源码 → 构建 → 软链） |
 
@@ -299,11 +300,12 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-按内容锚点幂等重打七个补丁（新版本改代码也能识别），不打这七处：
+按内容锚点幂等重打八个补丁（新版本改代码也能识别），不打这八处：
 - 配不了模型 API key（凭据 660 权限检查）
 - 发消息 `EPERM link`（session 持久化）
 - 对话框没有权限预设下拉（permission-presets 需改读 fs 沙箱的 `sandboxMode`）
 - 读图存不下来（attachment-local：`link` 失败改 `copy` 发布 + 挂载点 fsync 容错）
+- 工作区新文件写入 `EPERM link`（dsh-fs-local：`createIfAbsent` 时 link 失败改按 `rename` 发布）
 - 视觉识别报「模型未配置」/自定义 prompt 返回空文本（dsh-visual-plugin 回退到主视觉模型 + 空 content 重试降级）
 - 裸插件名从 `dsh-test` 解析不到（cordis-plugin-loader 需补 `v0` legacy 内部 loader 识别，鸿蒙 node v22.7.0 无 `getOrCreateModuleJob`/`getModuleJobForImport`）
 - `dsh-settings` 缺 `installSettingsSection`/`settingsNamespace` 旧导出（恢复导出并委托给 `SettingsProvider.installSection`，兼容沿用旧 API 的社区插件）
@@ -442,6 +444,14 @@ MIT License，见 [LICENSE](LICENSE)。
 ---
 
 ## 更新记录
+
+### 2026-09-01 — 跟进官方 0.1.2-alpha.3（fs-local 补丁 + 自更新器修复）
+
+dsh 官方更新至 `0.1.2-alpha.3`（2026-08-31 发布），本机 dsh-test 已同步升级并验证 web 可启动：
+
+- **`dsh-fs-local` 补丁纳入 `patchAll`（新增 `patchFsLocal()`）**：工作区新文件写入（`createIfAbsent`）在鸿蒙 `/storage` 对 `link()` 报 `EPERM`，且目标不存在也失败；此前该补丁不在自更新器里，每次升级重装都被冲掉、需手工重打。现按其它补丁同样的「内容锚点 + 幂等标记」纳入，升级/重装后自动重打。官方 `dsh-fs-local@0.1.2-alpha.3`（alpha.2→alpha.3 逐字节相同）均未含该兜底，已下载 tarball 比对确认。
+- **修复 `dsh-update.mjs` 的 `isUp()` 误判**：token 认证下根路径无 cookie 返回 303 跳转，`fetch()` 跟随跳转却不跨跳保留 cookie，最终仍 3xx，被误判为「未起来」导致 `install` 报错退出（实际升级已成功、服务在跑）。改为 `redirect:'manual'` 并把 2xx–3xx 都视为 up，`dsh-web.sh` 的 `is_up`（curl 任意响应）继续兜底。
+- 验证：`install` 成功后 `@deepseek-ai/dsh` 版本为 `0.1.2-alpha.3`，`fsLocal=重打`、其余补丁幂等；`node scripts/dsh-update.mjs patch` 全绿；3080 `/` 带 cookie 到 200，`codex-bridge` / `deveco-bridge` / `cron` / `peak-valley` / `cost-meter` / `evoresearch` 均加载。
 
 ### 2026-08-31 — 新增 harmony-chat-monash 鸿蒙对话 Monash 学生版预设
 

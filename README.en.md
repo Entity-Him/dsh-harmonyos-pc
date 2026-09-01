@@ -62,6 +62,7 @@ A complete adaptation suite to get [DeepSeek Harness](https://github.com/deepsee
 | Filesystem does not support hard links | Session persistence `link()` emits `EPERM` in release logs | Patch `dsh-session-persistence-jsonl`: `link` changed to `rename` |
 | No bash shell on HarmonyOS (native sandbox deps disabled) | No permission-preset dropdown in the dialog (read-only/workspace-write/danger-full-access) | Patch `dsh-permission-presets`: read `sandboxMode` from the fs sandbox (pure JS, always running) |
 | HarmonyOS storage rejects hard links / some mount points refuse read-only handles | Image reading (read_image / attachment) `link()` emits `EPERM`, directory `fsync` errors; images cannot persist → the model never sees them | Patch `dsh-attachment-local`: on `link` failure publish via `copy` (EEXIST race goes through sha256 integrity check); `syncDirectory` skips fsync on EPERM/EACCES/ENOTSUP mount points |
+| HarmonyOS storage rejects hard links | New-file writes in the workspace (`createIfAbsent`) `link()` emits `EPERM`, so new files cannot be created | Patch `dsh-fs-local`: verify the target is absent, then publish via `rename`, preserving create-if-absent semantics |
 | `dsh-visual-plugin` (third-party) panel defaults to an unconfigured vision endpoint | `vision model is not configured`, or a custom prompt returns empty text and gets hard-thrown | Patch `dsh-visual-plugin`: when the endpoint is empty, fall back to the main DeepSeek vision model (`llm-deepseek` + `DEEPSEEK_API_KEY`); retry once on empty content and degrade to a clear message |
 | `git ls-remote` is intercepted by the isogit shim | GitHub-source plugins cannot be installed | `scripts/dsh-hm-install.mjs` installer (fetch source → build → symlink) |
 
@@ -249,11 +250,12 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-Re-applies the seven patches idempotently using content anchors (recognizes code changes in new versions). Without these seven patches:
+Re-applies the eight patches idempotently using content anchors (recognizes code changes in new versions). Without these eight patches:
 - Can't configure a model API key (credential 660 permission check)
 - Sending messages errors with `EPERM link` (session persistence)
 - No permission-preset dropdown in the dialog (`dsh-permission-presets` must read `sandboxMode` from the fs sandbox)
 - Image reading can't persist (attachment-local: `link`→`copy` publish + mount-point fsync tolerance)
+- New-file workspace writes fail with `EPERM link` (dsh-fs-local: on `createIfAbsent`, `link` failure falls back to `rename`)
 - Vision reports "model not configured" / custom prompt returns empty text (dsh-visual-plugin falls back to the main vision model + empty-content retry/degrade)
 - Bare plugin names resolve from `dsh-test` and fail (`cordis-plugin-loader` needs a `v0` legacy internal-loader shape for HarmonyOS node v22.7.0, which lacks `getOrCreateModuleJob`/`getModuleJobForImport`)
 - `dsh-settings` lacks the old `installSettingsSection`/`settingsNamespace` exports (restore them and delegate to `SettingsProvider.installSection` for community plugins on the old API)
@@ -358,6 +360,14 @@ This project does not include dsh source code; it only contains independently wr
 ---
 
 ## Changelog
+
+### 2026-09-01 — Follow official 0.1.2-alpha.3 (fs-local patch + self-updater fix)
+
+dsh upgraded to official `0.1.2-alpha.3` (released 2026-08-31); the local dsh-test is synced and the web UI verified to start:
+
+- **`dsh-fs-local` patch folded into `patchAll` (new `patchFsLocal()`)** — new-file workspace writes (`createIfAbsent`) hit `EPERM` from `link()` on HarmonyOS `/storage`, even when the target is absent. This patch was previously missing from the self-updater, so every upgrade/reinstall wiped it and required a manual re-apply. It now follows the same "content-anchor + idempotency marker" pattern as the other patches and is re-applied automatically. Neither official `dsh-fs-local@0.1.2-alpha.3` nor alpha.2 (byte-identical) ships this fallback — confirmed by diffing the published tarballs.
+- **Fixed the false-negative in `dsh-update.mjs` `isUp()`** — under token auth the bare `/` returns a 303 redirect when no cookie is present; `fetch()` follows redirects but does not carry the cookie across hops, so it lands on a 3xx again and was misread as "not up", making `install` fail even though the upgrade succeeded and the server was serving. Switched to `redirect:'manual'` and treat 2xx–3xx as up; `dsh-web.sh`'s `is_up` (curl waits on any response) remains the backstop.
+- Validation: after `install`, `@deepseek-ai/dsh` reports `0.1.2-alpha.3` with `fsLocal=重打` and the other patches idempotent; `node scripts/dsh-update.mjs patch` is all-green; `/` on 3080 reaches 200 with a cookie, and `codex-bridge` / `deveco-bridge` / `cron` / `peak-valley` / `cost-meter` / `evoresearch` all load.
 
 ### 2026-08-31 — New preset harmony-chat-monash (Monash student edition)
 
