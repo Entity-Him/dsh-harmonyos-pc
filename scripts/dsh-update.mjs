@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // dsh 核心「检查更新」：check / patch / install / rollback。鸿蒙本机专用，零依赖。
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, unlinkSync, appendFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -466,16 +466,59 @@ function patchAll() {
   return { credential: r1.changed, session: r2.changed, permission: r3.changed, attachment: r4.changed, vision: r5.changed, cordisLoader: r6.changed, settingsCompat: r7.changed, loopbackAuth: r8.changed, fsLocal: r9.changed };
 }
 
-// compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包：npm install 重装核心包时，
-// 它们不在依赖树里会被剪掉，剪掉后 dsh 启动即崩（Cannot find module 'fzstd'，2026-08-28 实测，
-// 客户端显示 54 插件 pending）。仅当本机存在 compat-loader 才补齐，其余用户零影响。
-function ensureCompatDeps() {
+// compat-loader.mjs（node v22 鸿蒙运行时 polyfill）依赖的纯 JS 包。重装核心包时它们不在依赖树里
+// 会被剪掉（Cannot find module 'fzstd'，2026-08-28 实测，客户端 54 插件 pending）。
+// 不能用 npm 装：npm arborist 会按 ~/dsh-test/package.json 里过期的 @deepseek-ai/dsh 范围重解析整棵树，
+// 把刚装好的新版降级回旧版并冲掉全部补丁（2026-09-04 实测：只装 fzstd 就触发 0.1.2-rc.1 → 0.1.1-rc.2）。
+// 改为 registry 直装该包自身，零副作用。仅当本机存在 compat-loader 才补齐，其余用户零影响。
+async function installCompatPkg(name) {
+  const REG = 'https://registry.npmjs.org';
+  const enc = name.replace(/\//g, '%2f');
+  const res = await fetch(`${REG}/${enc}`, {
+    headers: { 'accept': 'application/vnd.npm.install-v1+json', 'user-agent': 'dsh-update' },
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) throw new Error('manifest ' + name + ' HTTP ' + res.status);
+  const m = await res.json();
+  const ver = m['dist-tags']?.latest;
+  const dist = m.versions?.[ver]?.dist;
+  if (!ver || !dist) throw new Error('无法确定 ' + name + ' latest');
+  const tgz = await (await fetch(dist.tarball, { signal: AbortSignal.timeout(120000) })).arrayBuffer();
+  const work = join(DSH_DIR, 'node_modules', '.compat-' + name.replace(/\//g, '_'));
+  rmSync(work, { recursive: true, force: true });
+  mkdirSync(work, { recursive: true });
+  writeFileSync(join(work, 'p.tgz'), Buffer.from(tgz));
+  const ex = join(work, 'x');
+  mkdirSync(ex, { recursive: true });
+  const t = spawnSync('tar', ['-xzf', join(work, 'p.tgz'), '-C', ex], { encoding: 'utf8' });
+  if (t.status !== 0) throw new Error('tar 解压失败 ' + name + ': ' + tail(t.stderr));
+  const dest = join(DSH_DIR, 'node_modules', name);
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dirname(dest), { recursive: true });
+  const mv = spawnSync('mv', [join(ex, 'package'), dest], { encoding: 'utf8' });
+  if (mv.status !== 0) throw new Error('移动失败 ' + name + ': ' + tail(mv.stderr));
+  rmSync(work, { recursive: true, force: true });
+}
+
+async function ensureCompatDeps() {
   if (!existsSync(join(DSH_DIR, 'compat-loader.mjs'))) return 0;
   const missing = ['fzstd', 'zstd-codec'].filter((p) => !readFileSafe(join(DSH_DIR, 'node_modules', p, 'package.json')));
-  if (missing.length === 0) return 0;
-  const r = npm('install', ...missing);
-  if (!r.ok) throw new Error('兼容依赖安装失败: ' + tail(r.out));
+  for (const p of missing) { log('直装兼容依赖: ' + p); await installCompatPkg(p); }
   return missing.length;
+}
+
+// 把 ~/dsh-test/package.json 的 @deepseek-ai/dsh 同步成实际安装版本并固化 fzstd/zstd-codec，
+// 防止后续任何 npm 操作按过期范围把整棵树降级（2026-09-04 实测装 fzstd 触发 0.1.2-rc.1→0.1.1-rc.2）。
+function syncPackageJson() {
+  const pkgFile = join(DSH_DIR, 'package.json');
+  let pkg = {};
+  try { pkg = JSON.parse(readFileSync(pkgFile, 'utf8')); } catch {}
+  pkg.dependencies = pkg.dependencies || {};
+  const v = readInstalled();
+  if (v) pkg.dependencies['@deepseek-ai/dsh'] = v;
+  pkg.dependencies['fzstd'] = pkg.dependencies['fzstd'] || '^0.1.1';
+  pkg.dependencies['zstd-codec'] = pkg.dependencies['zstd-codec'] || '^0.1.5';
+  writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
 }
 
 // ---- 锁 / 重启 ----
@@ -523,7 +566,8 @@ export async function install() {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
-  const compat = ensureCompatDeps();
+  syncPackageJson();
+  const compat = await ensureCompatDeps();
   if (compat > 0) log('补齐兼容依赖: ' + compat + ' 个 (fzstd/zstd-codec)');
   log('安装完成 → ' + target);
   writeFileSync(PREV, before);
@@ -549,7 +593,8 @@ async function rollback(version) {
     const r = npm('install', '@deepseek-ai/dsh@' + target);
     if (!r.ok) throw new Error('npm install 失败: ' + tail(r.out));
   }
-  ensureCompatDeps();
+  syncPackageJson();
+  await ensureCompatDeps();
   patchAll();
   stopDsh();
   restartDsh();

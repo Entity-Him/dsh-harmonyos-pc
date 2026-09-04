@@ -250,7 +250,7 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-Re-applies the eight patches idempotently using content anchors (recognizes code changes in new versions). Without these eight patches:
+Re-applies the nine patches idempotently using content anchors (recognizes code changes in new versions). Without these nine patches:
 - Can't configure a model API key (credential 660 permission check)
 - Sending messages errors with `EPERM link` (session persistence)
 - No permission-preset dropdown in the dialog (`dsh-permission-presets` must read `sandboxMode` from the fs sandbox)
@@ -259,6 +259,7 @@ Re-applies the eight patches idempotently using content anchors (recognizes code
 - Vision reports "model not configured" / custom prompt returns empty text (dsh-visual-plugin falls back to the main vision model + empty-content retry/degrade)
 - Bare plugin names resolve from `dsh-test` and fail (`cordis-plugin-loader` needs a `v0` legacy internal-loader shape for HarmonyOS node v22.7.0, which lacks `getOrCreateModuleJob`/`getModuleJobForImport`)
 - `dsh-settings` lacks the old `installSettingsSection`/`settingsNamespace` exports (restore them and delegate to `SettingsProvider.installSection` for community plugins on the old API)
+- The bare address `127.0.0.1:3080` in a browser/favorite always shows 401 "authentication required" (dsh-client-connection loopback is exempt from the token and auto-mints a 30-day cookie; stale token URLs are also re-minted)
 
 ---
 
@@ -360,6 +361,14 @@ This project does not include dsh source code; it only contains independently wr
 ---
 
 ## Changelog
+
+### 2026-09-03 — Follow official 0.1.2-rc.1 (all 9 patch anchors hit + 2 self-updater compat fixes)
+
+dsh upgraded to official `0.1.2-rc.1` (released 2026-09-03); the local dsh-test is synced and the web UI verified to start. All nine node_modules patch anchors matched rc.1, and after re-applying, 3080 behaves normally:
+
+- **`ensureCompatDeps()` drops npm for direct tarball install**: the rc.1 closure no longer contains `fzstd`/`zstd-codec` (compat-loader deps). The old `npm install` path made npm's arborist re-resolve the whole tree against the stale `^0.1.1-rc.2` range in `~/dsh-test/package.json`, **downgrading freshly-installed `0.1.2-rc.1` back to `0.1.1-rc.2`** and wiping every patch (reproduced this run). It now installs those two packages directly from the registry (manifest + tarball + tar), with zero side effects; new `syncPackageJson()` pins the installed dsh version into `~/dsh-test/package.json` after upgrade/rollback so no later `npm` run can downgrade again.
+- **`dsh-web.sh` upgraded to a working HarmonyOS version + orphan-lock cleanup**: the in-repo `scripts/dsh-web.sh` was still the v24-node draft (crashes `ENOMEM` in the V8 code-range on HarmonyOS) and lacked compat-loader / the local market mirror / correct patch resolution. It now mirrors the machine-proven logic: default deveco node v22 + `--experimental-loader compat-loader.mjs` + `--patch harmony.patch.yml` + market mirror on 3988, with `NODE_BIN/DSH_DIR/PATCH_YML/PORT/LOG` env overrides. New `clear_stale_locks()` handles dsh's atomic-write orphan locks (SIGKILL/crash leaves `~/.dsh/profiles/node_modules.lock`, so the next boot dies with "timed out waiting for the writer lock" — reproduced this run); it clears them once before starting.
+- Validation: `@deepseek-ai/dsh` 0.1.2-rc.1 (549-package closure); `node scripts/dsh-update.mjs patch` all-green (credential/session/permission/attachment/cordisLoader/settingsCompat/loopbackAuth/fsLocal re-applied, vision idempotent); 3080 returns 303 with a token; codex-bridge / deveco-bridge / cron / peak-valley / evoresearch / cost-meter all load. `bridge-browser` stays disabled (rc.1 `dsh-api-remotes` still doesn't restore `ApiRemoteSessionNotFound`).
 
 ### 2026-09-01 — Follow official 0.1.2-alpha.3 (fs-local patch + self-updater fix)
 

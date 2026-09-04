@@ -300,7 +300,7 @@ for _svc in dsh-web; do sh "$HOME/bin/$_svc.sh" >/dev/null 2>&1 & done
 node scripts/dsh-update.mjs patch
 ```
 
-按内容锚点幂等重打八个补丁（新版本改代码也能识别），不打这八处：
+按内容锚点幂等重打九个补丁（新版本改代码也能识别），不打这九处：
 - 配不了模型 API key（凭据 660 权限检查）
 - 发消息 `EPERM link`（session 持久化）
 - 对话框没有权限预设下拉（permission-presets 需改读 fs 沙箱的 `sandboxMode`）
@@ -309,6 +309,7 @@ node scripts/dsh-update.mjs patch
 - 视觉识别报「模型未配置」/自定义 prompt 返回空文本（dsh-visual-plugin 回退到主视觉模型 + 空 content 重试降级）
 - 裸插件名从 `dsh-test` 解析不到（cordis-plugin-loader 需补 `v0` legacy 内部 loader 识别，鸿蒙 node v22.7.0 无 `getOrCreateModuleJob`/`getModuleJobForImport`）
 - `dsh-settings` 缺 `installSettingsSection`/`settingsNamespace` 旧导出（恢复导出并委托给 `SettingsProvider.installSection`，兼容沿用旧 API 的社区插件）
+- 浏览器/收藏夹裸地址 `127.0.0.1:3080` 永远 401「authentication required」（dsh-client-connection 回环地址免 token 自动签发 30 天 cookie，旧 token URL 也兜底换新）
 
 ---
 
@@ -444,6 +445,14 @@ MIT License，见 [LICENSE](LICENSE)。
 ---
 
 ## 更新记录
+
+### 2026-09-03 — 跟进官方 0.1.2-rc.1（9 处补丁锚点全命中 + 2 个自更新器兼容修复）
+
+dsh 官方更新至 `0.1.2-rc.1`（2026-09-03 发布），本机 dsh-test 已升级并验证 web 可启动。九个 node_modules 补丁的内容锚点在 rc.1 全部命中，重打后 3080 正常：
+
+- **`ensureCompatDeps()` 弃用 npm、改直装**：0.1.2-rc.1 闭包不再含 `fzstd`/`zstd-codec`（compat-loader 依赖）。此前用 `npm install` 补齐会触发 npm arborist 按 `~/dsh-test/package.json` 里过期的 `^0.1.1-rc.2` 重解析整棵树，把刚装好的 `0.1.2-rc.1` **降级回 `0.1.1-rc.2`** 并冲掉全部补丁（本次实测复现）。改为 registry 直装该两包自身（fetch manifest + tarball + tar 解压），零副作用；并新增 `syncPackageJson()`，升级/回滚后把 dsh 版本固化进 `~/dsh-test/package.json`，防止后续任何 npm 操作再降级。
+- **`dsh-web.sh` 升级为鸿蒙可用版 + 孤儿锁清理**：仓库内 `scripts/dsh-web.sh` 此前仍是 v24 node 旧版（鸿蒙上 V8 code-range 崩 `ENOMEM`），也没有 compat-loader / 插件市场本地镜像 / 正确的补丁定位。现同步为本机可用逻辑：默认用 deveco 自带 node v22 + `--experimental-loader compat-loader.mjs` + `--patch harmony.patch.yml` + 市场 3988 本地镜像，`NODE_BIN/DSH_DIR/PATCH_YML/PORT/LOG` 可用环境变量覆盖。新增 `clear_stale_locks()`：dsh 的 atomic-write 从不回收孤儿锁，SIGKILL/崩溃退出会留下 `~/.dsh/profiles/node_modules.lock`，下次启动即「timed out waiting for the writer lock」（本次实测）；启动前清一次，避免该死锁。
+- 验证：`@deepseek-ai/dsh` 0.1.2-rc.1（闭包 549 包），`node scripts/dsh-update.mjs patch` 全绿（credential/session/permission/attachment/cordisLoader/settingsCompat/loopbackAuth/fsLocal 重打、vision 幂等），3080 带 token 303 正常，codex-bridge / deveco-bridge / cron / peak-valley / evoresearch / cost-meter 均加载。`bridge-browser` 维持禁用（rc.1 `dsh-api-remotes` 仍未恢复 `ApiRemoteSessionNotFound`）。
 
 ### 2026-09-01 — 跟进官方 0.1.2-alpha.3（fs-local 补丁 + 自更新器修复）
 
